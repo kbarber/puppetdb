@@ -38,6 +38,10 @@
                expected)))))
 
   (testing "gc-interval"
+    (testing "should allow zero"
+      (let [config (configure-database {:database {:gc-interval 0}})]
+        (is (= (get-in config [:database :gc-interval]) 0))))
+
     (testing "should use the value specified"
       (let [config (configure-database {:database {:gc-interval 900}})]
         (is (= (get-in config [:database :gc-interval]) 900))))

@@ -363,9 +363,11 @@
                           (future (with-error-delivery error
                                     (jetty/run-jetty app jetty))))
           db-gc         (do
-                          (log/info (format "Starting database sweeper (%d minute interval)" db-gc-minutes))
-                          (future (with-error-delivery error
-                                    (sweep-database! db db-gc-minutes node-ttl-seconds report-ttl-seconds))))]
+                          (if (pos? db-gc-minutes)
+                            ((log/info (format "Starting database sweeper (%d minute interval)" db-gc-minutes))
+                            (future (with-error-delivery error
+                                      (sweep-database! db db-gc-minutes node-ttl-seconds report-ttl-seconds))))
+                            (log/info "Database sweeper disabled")))]
 
       ;; Start debug REPL if necessary
       (let [{:keys [enabled type host port] :or {type "nrepl" host "localhost"}} (:repl config)]
