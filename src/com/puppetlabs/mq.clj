@@ -3,7 +3,9 @@
 (ns com.puppetlabs.mq
   (:import [org.apache.activemq.broker BrokerService]
            [org.apache.activemq ScheduledMessage]
-           [org.apache.activemq.usage SystemUsage])
+           [org.apache.activemq.usage SystemUsage]
+           [org.apache.activemq.store.leveldb LevelDBPersistenceAdapter]
+           [java.io File])
   (:require [cheshire.core :as json]
             [clamq.activemq :as activemq]
             [clamq.protocol.connection :as mq-conn]
@@ -89,20 +91,20 @@
              (string? dir)
              (map? config)]
      :post  [(instance? BrokerService %)]}
-    (let [mq (doto (BrokerService.)
+    (let [pd (new File dir)
+          pa (doto (LevelDBPersistenceAdapter.)
+               (.setDirectory pd)
+               (.setParanoidChecks true)
+               (.setLogSize 107374182))
+          mq (doto (BrokerService.)
                (.setBrokerName name)
                (.setDataDirectory dir)
                (.setSchedulerSupport true)
-               (.setPersistent true)
+               (.setPersistenceAdapter pa)
                (set-store-usage! (:store-usage config))
                (set-temp-usage!  (:temp-usage config)))
           mc (doto (.getManagementContext mq)
-               (.setCreateConnector false))
-          db (doto (.getPersistenceAdapter mq)
-               (.setIgnoreMissingJournalfiles true)
-               (.setArchiveCorruptedIndex true)
-               (.setCheckForCorruptJournalFiles true)
-               (.setChecksumJournalFiles true))]
+               (.setCreateConnector false))]
       mq)))
 
 (defn start-broker!

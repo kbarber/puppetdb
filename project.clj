@@ -57,7 +57,9 @@
                  [clojureql "1.0.3"]
                  ;; MQ connectivity
                  [clamq/clamq-activemq "0.4" :exclusions [org.slf4j/slf4j-api]]
-                 [org.apache.activemq/activemq-core "5.6.0" :exclusions [org.slf4j/slf4j-api org.fusesource.fuse-extra/fusemq-leveldb]]
+                 [org.apache.activemq/activemq-core "5.7.0" :exclusions [org.slf4j/slf4j-api]]
+                 [org.apache.activemq/activemq-leveldb-store "5.8.0"]
+                 [org.apache.activemq/activemq-kahadb-store "5.8.0"]
                  ;; WebAPI support libraries.
                  [net.cgrand/moustache "1.1.0" :exclusions [ring/ring-core org.clojure/clojure]]
                  [clj-http "0.5.3"]
