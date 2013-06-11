@@ -143,7 +143,7 @@ class Puppet::Resource::Catalog::Puppetdb < Puppet::Indirector::REST
 
     resource_table = {}
     hash['resources'].each do |resource|
-      resource_table[ [resource['type'], resource['title']] ] = resource
+      resource_table[ [resource['type'], resource['title'].to_s] ] = resource
     end
 
     hash['resources'].each do |resource|
@@ -201,13 +201,13 @@ class Puppet::Resource::Catalog::Puppetdb < Puppet::Indirector::REST
               other_hash['title'] = other_hash['title'].sub(/\/+$/, '')
             end
 
-            other_array = [other_hash['type'], other_hash['title']]
+            other_array = [other_hash['type'], other_hash['title'].to_s]
 
             # Try to find the resource by type/title or look it up as an alias
             # and try that
             other_resource = resource_table[other_array]
             if other_resource.nil? and alias_hash = aliases[other_array]
-              other_resource = resource_table[ alias_hash.values_at('type', 'title') ]
+              other_resource = resource_table[ [ alias_hash['type'], alias_hash['title'].to_s ] ]
             end
 
             raise Puppet::Error, "Invalid relationship: #{edge_to_s(resource_hash_to_ref(resource_hash), other_ref, param)}, because #{other_ref} doesn't seem to be in the catalog" unless other_resource
