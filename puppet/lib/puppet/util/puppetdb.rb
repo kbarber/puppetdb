@@ -13,8 +13,24 @@ module Puppet::Util::Puppetdb
     config.server
   end
 
+  def self.command_server
+    config.command_server || config.server
+  end
+
+  def self.query_server
+    config.query_server || config.server
+  end
+
   def self.port
     config.port
+  end
+
+  def self.command_port
+    config.command_port || config.port
+  end
+
+  def self.query_port
+    config.query_port || config.port
   end
 
   def self.config
@@ -30,8 +46,24 @@ module Puppet::Util::Puppetdb
       Puppet::Util::Puppetdb.server
     end
 
+    def command_server
+      Puppet::Util::Puppetdb.command_server
+    end
+
+    def query_server
+      Puppet::Util::Puppetdb.query_server
+    end
+
     def port
       Puppet::Util::Puppetdb.port
+    end
+
+    def command_port
+      Puppet::Util::Puppetdb.command_port
+    end
+
+    def query_port
+      Puppet::Util::Puppetdb.query_port
     end
   end
 

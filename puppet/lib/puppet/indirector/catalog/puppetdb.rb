@@ -1,8 +1,8 @@
 require 'puppet/resource/catalog'
-require 'puppet/indirector/rest'
+require 'puppet/indirector/puppetdb_cqrs'
 require 'puppet/util/puppetdb'
 
-class Puppet::Resource::Catalog::Puppetdb < Puppet::Indirector::REST
+class Puppet::Resource::Catalog::Puppetdb < Puppet::Indirector::PuppetdbCqrs
   include Puppet::Util::Puppetdb
   include Puppet::Util::Puppetdb::CommandNames
 

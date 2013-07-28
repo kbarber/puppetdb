@@ -436,6 +436,7 @@
         update-server                              (:update-server global "http://updates.puppetlabs.com/check-for-updates")
         ;; TODO: revisit the choice of 20000 as a default value for event queries
         event-query-limit                          (get global :event-query-limit 20000)
+        read-only                                  (pl-utils/parse-bool (get global :read-only "false"))
         db                                         (pl-jdbc/pooled-datasource database)
         gc-interval                                (get database :gc-interval)
         node-ttl                                   (get database :node-ttl)
@@ -459,19 +460,22 @@
     ;; Add a shutdown hook where we can handle any required cleanup
     (pl-utils/add-shutdown-hook! on-shutdown)
 
+    (when read-only
+      (log/info "PuppetDB is in read-only mode"))
+
     ;; Ensure the database is migrated to the latest version, and warn if it's
     ;; deprecated. We do this in a single connection because HSQLDB seems to
     ;; get confused if the database doesn't exist but we open and close a
     ;; connection without creating anything.
     (sql/with-connection db
       (scf-store/warn-on-db-deprecation!)
-      (migrate!))
+      (when-not read-only (migrate!)))
 
     ;; Initialize database-dependent metrics
     (pop/initialize-metrics db)
 
     (let [error         (promise)
-          broker        (try
+          broker        (when-not read-only (try
                           (log/info "Starting broker")
                           (mq/build-and-start-broker! "localhost" mq-dir command-processing)
                           (catch java.io.EOFException e
@@ -479,12 +483,12 @@
                               "EOF Exception caught during broker start, this "
                               "might be due to KahaDB corruption. Consult the "
                               "PuppetDB troubleshooting guide.")
-                            (throw e)))
-          command-procs (let [nthreads (command-processing :threads)]
+                            (throw e))))
+          command-procs (when-not read-only (let [nthreads (command-processing :threads)]
                           (log/info (format "Starting %d command processor threads" nthreads))
                           (vec (for [n (range nthreads)]
                                  (future (with-error-delivery error
-                                           (load-from-mq mq-addr mq-endpoint discard-dir db))))))
+                                           (load-from-mq mq-addr mq-endpoint discard-dir db)))))))
           updater       (future (maybe-check-for-updates product-name update-server db))
           web-app       (let [authorized? (if-let [wl (jetty :certificate-whitelist)]
                                             (pl-utils/cn-whitelist->authorizer wl)
@@ -496,7 +500,7 @@
           job-pool      (mk-pool)]
 
       ;; Pretty much this helper just knows our job-pool and gc-interval
-      (let [gc-interval-millis (to-millis gc-interval)
+      (when-not read-only (let [gc-interval-millis (to-millis gc-interval)
             gc-task #(interspaced gc-interval-millis % job-pool)
             db-maintenance-tasks [garbage-collect!
                                   (when (pos? (to-secs node-ttl))
@@ -507,7 +511,7 @@
                                     (partial sweep-reports! report-ttl))]]
 
         (gc-task #(apply perform-db-maintenance! db (remove nil? db-maintenance-tasks)))
-        (gc-task #(compress-dlo! dlo-compression-threshold discard-dir)))
+        (gc-task #(compress-dlo! dlo-compression-threshold discard-dir))))
 
       ;; Start debug REPL if necessary
       (let [{:keys [enabled type host port] :or {type "nrepl" host "localhost"}} (:repl config)]
@@ -516,13 +520,13 @@
           (start-repl type host port)))
 
       (let [exception (deref error)]
-        (doseq [cp command-procs]
-          (future-cancel cp))
+        (when-not read-only (doseq [cp command-procs]
+          (future-cancel cp)))
         (future-cancel updater)
         (future-cancel web-app)
 
         ;; Stop the mq the old-fashioned way
-        (mq/stop-broker! broker)
+        (when-not read-only (mq/stop-broker! broker))
 
         ;; Now throw the exception so the top-level handler will see it
         (throw exception)))))

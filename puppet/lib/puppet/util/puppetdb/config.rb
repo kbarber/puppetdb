@@ -21,9 +21,15 @@ class Config
   # Public class methods
 
   def self.load(config_file = nil)
-    defaults = { :server                      => "puppetdb",
-                 :port                        => 8081,
-                 :ignore_blacklisted_events   => true,
+    defaults = {
+      :server              => "puppetdb",
+      :command_server      => nil,
+      :query_server        => nil,
+      :port                => 8081,
+      :command_port        => nil,
+      :query_port          => nil,
+      :max_queued_commands => 1000,
+      :ignore_blacklisted_events => true,
     }
 
     config_file ||= File.join(Puppet[:confdir], "puppetdb.conf")
@@ -63,13 +69,18 @@ class Config
     main_section = main_section.inject({}) {|h, (k,v)| h[k.to_sym] = v ; h}
     # merge with defaults but filter out anything except the legal settings
     config_hash = defaults.merge(main_section).reject do |k, v|
-      !([:server, :port, :ignore_blacklisted_events].include?(k))
+      !([:server, :command_server, :query_server,:port, :command_port,
+         :query_port, :ignore_blacklisted_events].include?(k))
     end
 
     config_hash[:server] = config_hash[:server].strip
+    config_hash[:command_server] &&= config_hash[:command_server].strip
+    config_hash[:query_server] &&= config_hash[:query_server].strip
     config_hash[:port] = config_hash[:port].to_i
+    config_hash[:command_port] &&= config_hash[:command_port].to_i
+    config_hash[:query_port] &&= config_hash[:query_port].to_i
     config_hash[:ignore_blacklisted_events] =
-        Puppet::Util::Puppetdb.to_bool(config_hash[:ignore_blacklisted_events])
+      Puppet::Util::Puppetdb.to_bool(config_hash[:ignore_blacklisted_events])
 
     self.new(config_hash)
   rescue => detail
@@ -89,8 +100,24 @@ class Config
     config[:server]
   end
 
+  def command_server
+    config[:command_server]
+  end
+
+  def query_server
+    config[:query_server]
+  end
+
   def port
     config[:port]
+  end
+
+  def command_port
+    config[:command_port]
+  end
+
+  def query_port
+    config[:query_port]
   end
 
   def ignore_blacklisted_events?

@@ -108,6 +108,15 @@
    :post [(or (number? %) (nil? %))]}
   ((some-fn parse-int parse-float) s))
 
+(defn parse-bool
+  "Converts a string `s` to a boolean."
+  [s]
+  {:pre  [(string? s)]
+   :post [(boolean? %)]}
+  (if (= "true" s) true
+    (if (= "false" s) false
+      (throw (IllegalArgumentException. "Must be 'true' or 'false'")))))
+
 
 ;; ## Collection operations
 

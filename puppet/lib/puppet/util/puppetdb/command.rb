@@ -34,7 +34,7 @@ class Puppet::Util::Puppetdb::Command
     for_whom = " for #{certname}" if certname
 
     begin
-      http = Puppet::Network::HttpPool.http_instance(config.server, config.port)
+      http = Puppet::Network::HttpPool.http_instance(config.command_server, config.command_port)
       response = http.post(Url, "checksum=#{checksum}&payload=#{escaped_payload}", headers)
 
       Puppet::Util::Puppetdb.log_x_deprecation_header(response)
@@ -54,7 +54,7 @@ class Puppet::Util::Puppetdb::Command
       #  Puppet::Util::Logging#log_exception or #log_and_raise here; w/o them
       #  we lose context as to where the original exception occurred.
       puts e, e.backtrace if Puppet[:trace]
-      raise Puppet::Error, "Failed to submit '#{command}' command#{for_whom} to PuppetDB at #{config.server}:#{config.port}: #{e}"
+      raise Puppet::Error, "Failed to submit '#{command}' command#{for_whom} to PuppetDB at #{config.command_server}:#{config.command_port}: #{e}"
     end
   end
 

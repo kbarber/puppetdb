@@ -1,8 +1,8 @@
 require 'puppet/node/facts'
-require 'puppet/indirector/rest'
+require 'puppet/indirector/puppetdb_cqrs'
 require 'puppet/util/puppetdb'
 
-class Puppet::Node::Facts::Puppetdb < Puppet::Indirector::REST
+class Puppet::Node::Facts::Puppetdb < Puppet::Indirector::PuppetdbCqrs
   include Puppet::Util::Puppetdb
   include Puppet::Util::Puppetdb::CommandNames
 

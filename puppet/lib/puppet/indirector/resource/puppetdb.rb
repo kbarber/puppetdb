@@ -1,7 +1,7 @@
-require 'puppet/indirector/rest'
+require 'puppet/indirector/puppetdb_cqrs'
 require 'puppet/util/puppetdb'
 
-class Puppet::Resource::Puppetdb < Puppet::Indirector::REST
+class Puppet::Resource::Puppetdb < Puppet::Indirector::PuppetdbCqrs
   include Puppet::Util::Puppetdb
 
   def search(request)
