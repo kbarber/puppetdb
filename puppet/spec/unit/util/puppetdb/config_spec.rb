@@ -61,11 +61,13 @@ CONF
 server = main_server
 port = 1234
 max_queued_commands = 0
+soft_write_failure = true
 CONF
         config = described_class.load
         config.server.should == 'main_server'
         config.port.should == 1234
         config.max_queued_commands.should == 0
+        config.soft_write_failure.should be_true
       end
 
       it "should use the default if no value is specified" do
@@ -74,6 +76,7 @@ CONF
         config = described_class.load
         config.server.should == 'puppetdb'
         config.port.should == 8081
+        config.soft_write_failure.should be_false
       end
 
       it "should be insensitive to whitespace" do
