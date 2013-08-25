@@ -60,6 +60,14 @@
       (is (= 0 (quotient 1 0)))
       (is (= 10 (quotient 1 0 10))))))
 
+(deftest parse-bool-test
+  (testing "should convert true to true"
+    (is (= (parse-bool "true") true)))
+  (testing "should convert false to false"
+    (is (= (parse-bool "false") false)))
+  (testing "should throw an exception if neither"
+    (is (thrown? IllegalArgumentException (parse-bool "foobar")))))
+
 (deftest mapvals-test
   (testing "should default to applying a function to all of the keys"
     (is (= {:a 2 :b 3} (mapvals inc {:a 1 :b 2}))))

@@ -117,7 +117,6 @@
     (if (= "false" s) false
       (throw (IllegalArgumentException. "Must be 'true' or 'false'")))))
 
-
 ;; ## Collection operations
 
 (defn symmetric-difference
