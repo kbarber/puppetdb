@@ -299,6 +299,53 @@
              :when (not (empty? param-sets))]
        (apply sql/do-prepared the-sql param-sets)))))
 
+(defn diff-existing-edges
+  "Returns a vector with three edge maps, edges to be added,
+   edges to be left alone and edges to be deleted"
+  [new-edges old-edges]
+  {:pre [(or (map? new-edges) (nil? new-edges))
+         (or (map? old-edges) (nil? old-edges))]}
+  (let [diffs    (data/diff new-edges old-edges)
+        just-new (or (first diffs)
+                     {})
+        just-old (or (second diffs)
+                     {})
+        new-keys (keys just-new)
+        old-keys (keys just-old)]
+    [(select-keys just-new (remove just-old new-keys))
+     (select-keys just-new (filter just-old new-keys))
+     (select-keys just-old (remove just-new old-keys))]))
+
+(defn catalog-edges-map
+  "Return all edges for a given catalog id as a map"
+  [catalog-id]
+  (sql/with-query-results result-set
+    ["SELECT source, target, type FROM edges WHERE catalog_id=?" catalog-id]
+    ;; Transform the result-set into a map with [source,target,type] as the key
+    ;; and nil as always the value. This just feeds into clojure.data/diff
+    ;; better this way.
+    (zipmap (map vals result-set)
+            (repeat nil))))
+
+(defn delete-edges!
+  "Delete edges"
+  [catalog-id edges]
+  {:pre [(or (coll? edges) (nil? edges))
+         (number? catalog-id)]}
+  (doseq [edge edges]
+    ;; TODO: inefficient
+    (sql/delete-rows :edges
+      ["catalog_id=? and source=? and target=? and type=?" (flatten [catalog-id edge])])))
+
+(defn insert-edges!
+  "Insert edges"
+  [catalog-id edges]
+  {:pre [(coll? edges)
+         (number? catalog-id)]}
+  (let [rows (for [edge edges]
+               (flatten [catalog-id edge]))]
+    (apply sql/insert-rows :edges rows)))
+
 (defn add-edges!
   "Persist the given edges in the database
 
@@ -312,13 +359,17 @@
   {:pre [(number? catalog-id)
          (coll? edges)
          (map? refs-to-hashes)]}
-  (let [the-sql "INSERT INTO edges (catalog_id,source,target,type) VALUES (?,?,?,?)"
-        rows    (for [{:keys [source target relationship]} edges
-                      :let [source-hash (refs-to-hashes source)
-                            target-hash (refs-to-hashes target)
-                            type        (name relationship)]]
-                  [catalog-id source-hash target-hash type])]
-    (apply sql/do-prepared the-sql rows)))
+  (let [new-edges (zipmap
+                    (for [{:keys [source target relationship]} edges
+                       :let [source-hash (refs-to-hashes source)
+                             target-hash (refs-to-hashes target)
+                             type        (name relationship)]]
+                       [source-hash target-hash type])
+                    (repeat nil))
+        [add-edges _ delete-edges] (diff-existing-edges
+                                     new-edges (catalog-edges-map catalog-id))]
+    (delete-edges! catalog-id (keys delete-edges))
+    (insert-edges! catalog-id (keys add-edges))))
 
 (defn update-catalog-hash-match
   "When a new incoming catalog has the same hash as an existing catalog, update metrics
@@ -489,8 +540,8 @@
 (defn diff-existing-facts
   "Returns a vector with three fact maps, facts to be added,
    facts to be updated and facts to be deleted"
-  [certname new-facts old-facts]
-  (let [diffs (data/diff new-facts old-facts)
+  [new-facts old-facts]
+  (let [diffs    (data/diff new-facts old-facts)
         just-new (or (first diffs)
                      {})
         just-old (or (second diffs)
@@ -506,7 +557,7 @@
    certname and will update, delete or insert the facts as necessary
    to match the facts argument."
   [certname facts timestamp]
-  (let [[add-facts update-facts delete-facts] (diff-existing-facts certname facts (cert-fact-map certname))]
+  (let [[add-facts update-facts delete-facts] (diff-existing-facts facts (cert-fact-map certname))]
     (sql/update-values :certname_facts_metadata ["certname=?" certname]
                          {:timestamp (to-timestamp timestamp)})
     (delete-facts! certname (keys delete-facts))

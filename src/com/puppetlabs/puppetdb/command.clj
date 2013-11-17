@@ -73,7 +73,7 @@
   (:use [slingshot.slingshot :only [try+ throw+]]
         [cheshire.custom :only (JSONable)]
         [clj-http.util :only [url-encode]]
-        [com.puppetlabs.jdbc :only (with-transacted-connection)]
+        [com.puppetlabs.jdbc :only [with-transacted-connection with-transacted-connection']]
         [com.puppetlabs.puppetdb.command.constants :only [command-names]]
         [metrics.meters :only (meter mark!)]
         [metrics.histograms :only (histogram update!)]
@@ -308,11 +308,11 @@
 
 (defn replace-catalog*
   [{:keys [payload annotations version]} {:keys [db catalog-hash-debug-dir]}]
-  (let [catalog (upon-error-throw-fatality (cat/parse-catalog payload version))
-        certname (:certname catalog)
-        id (:id annotations)
+  (let [catalog   (upon-error-throw-fatality (cat/parse-catalog payload version))
+        certname  (:certname catalog)
+        id        (:id annotations)
         timestamp (:received annotations)]
-    (with-transacted-connection db
+    (with-transacted-connection' db :repeatable-read
       (scf-storage/maybe-activate-node! certname timestamp)
       ;; Only store a catalog if it's newer than the current catalog
       (if-not (scf-storage/catalog-newer-than? certname timestamp)
