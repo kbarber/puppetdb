@@ -83,10 +83,26 @@
   (drop-constraints table "primary key"))
 
 (defn- drop-foreign-keys
-  "Drop all foreign keys on the given `table`. Does not currently support
-  selecting a single key to drop."
-  [table]
-  (drop-constraints table "foreign key"))
+  "Drop foreign keys on the given `table`.
+
+  With no arguments it will delete all foreign keys indiscrimenantly, when a
+  second argument is provided only the foreign keys referencing that
+  particular target table will be removed."
+  ([table]
+    (drop-constraints table "foreign key"))
+  ([table foreign-column]
+    (let [results     (query-to-vec
+                        (str "SELECT constraint_name FROM information_schema.table_constraints tc "
+                             "  LEFT OUTER JOIN information_schema.constraint_table_usage ctu USING (constraint_name) "
+                             "  WHERE LOWER(tc.table_name) = LOWER(?) AND LOWER(tc.constraint_type) = 'foreign key' "
+                             "    AND LOWER(ctu.table_name) = LOWER(?)")
+                        table foreign-column)
+          constraints (map :constraint_name results)]
+      (if (seq constraints)
+        (apply sql/do-commands
+               (for [constraint constraints]
+                 (format "ALTER TABLE %s DROP CONSTRAINT %s" table constraint)))
+        (throw (IllegalArgumentException. (format "No %s foreign constraint exists on the table '%s' targetting table '%s'" constraint-type table foreign column)))))))
 
 (defn initialize-store
   "Create the initial database schema."
@@ -562,15 +578,84 @@
       "CREATE INDEX idx_catalog_resources_exported
          ON catalog_resources (exported)")))
 
-(defn collapse-down-to-certificate-edges
+(defn foobar
   ""
   []
+
   (sql/do-command
-    "CREATE TABLE certname_edges (
-       certname text NOT NULL,
-       source character varying(40) NOT NULL,
-       target character varying(40) NOT NULL,
-       type text NOT NULL)"))
+    ;; Garbage collect to make sure there is no orphaned data, as this will no longer be handled
+    "DELETE FROM catalogs WHERE NOT EXISTS (SELECT * FROM certname_catalogs cc WHERE cc.catalog_id=catalogs.id)"
+    ;; TODO: not sure if we need this GC yet
+    "DELETE FROM resource_params_cache WHERE NOT EXISTS (SELECT * FROM catalog_resources cr WHERE cr.resource=resource_params_cache.resource)"
+
+    ;; Create table without constraints
+    "CREATE TABLE catalogs_transform (
+      id bigserial NOT NULL,
+      hash character varying(40) NOT NULL,
+      api_version integer NOT NULL,
+      catalog_version text NOT NULL,
+      transaction_uuid character varying(255) DEFAULT NULL::character varying,
+      timestamp timestamp with time zone,
+      certname text)"
+
+    ;; Transfer data from old tables
+    "INSERT INTO catalogs_transform (id, hash, api_version, catalog_version, transaction_uuid, timestamp, certname)
+      SELECT id, hash, api_version, catalog_version, transaction_uuid, timestamp, certname
+        FROM certname_catalogs cc, catalogs c
+        WHERE cc.catalog_id = c.id")
+
+  ;; Remove old foreign keys from catalog_resources that reference catalogs
+  (drop-foreign-keys "edges" "catalogs")
+
+  ;; Remove old foreign keys from edges that reference catalogs
+  ;; TODO: this deletes too many keys
+  (drop-foreign-keys "catalog_resources" "catalogs")
+
+  (sql/do-command
+    ;; Drop old tables certname_catalogs first to avoid constraint issues
+    "DROP TABLE certname_catalogs"
+    "DROP TABLE catalogs"
+
+    ;; Rename transfer table
+    "ALTER TABLE catalogs_transform RENAME TO catalogs"
+
+    ;; Add back old indexes to new table
+    "ALTER TABLE catalogs
+      ADD CONSTRAINT catalogs_pkey PRIMARY KEY(id)"
+
+    "CREATE INDEX idx_catalogs_transaction_uuid
+      ON catalogs
+      USING btree
+      (transaction_uuid)"
+
+    "ALTER TABLE catalogs
+      ADD CONSTRAINT catalogs_certname_key UNIQUE(certname)"
+
+    "ALTER TABLE catalogs
+      ADD CONSTRAINT catalogs_hash_key UNIQUE(hash)"
+
+    ;; Add foreign keys to reference certnames
+    "ALTER TABLE catalogs
+      ADD CONSTRAINT catalogs_certname_fkey FOREIGN KEY (certname)
+      REFERENCES certnames (name)
+      ON UPDATE NO ACTION ON DELETE CASCADE"
+
+    ;; Add back old foreign key constraints to other tables
+    "ALTER TABLE catalog_resources
+      ADD CONSTRAINT catalog_resources_catalog_id_fkey FOREIGN KEY (catalog_id)
+          REFERENCES catalogs (id)
+          ON UPDATE NO ACTION ON DELETE CASCADE"
+
+    ;; TODO: find out how we can avoid deleting this one
+    "ALTER TABLE catalog_resources
+      ADD CONSTRAINT catalog_resources_resource_fkey FOREIGN KEY (resource)
+        REFERENCES resource_params_cache (resource) MATCH SIMPLE
+        ON UPDATE NO ACTION ON DELETE CASCADE"
+
+    "ALTER TABLE edges
+      ADD CONSTRAINT edges_catalog_id_fkey FOREIGN KEY (catalog_id)
+          REFERENCES catalogs (id)
+          ON UPDATE NO ACTION ON DELETE CASCADE"))
 
 ;; The available migrations, as a map from migration version to migration function.
 (def migrations
@@ -592,7 +677,7 @@
    16 drop-resource-tags-index
    17 use-bigint-instead-of-catalog-hash
    18 add-index-on-exported-column
-   19 collapse-down-to-certificate-edges})
+   19 foobar})
 
 (def desired-schema-version (apply max (keys migrations)))
 
