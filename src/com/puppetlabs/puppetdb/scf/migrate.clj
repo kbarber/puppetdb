@@ -562,6 +562,16 @@
       "CREATE INDEX idx_catalog_resources_exported
          ON catalog_resources (exported)")))
 
+(defn collapse-down-to-certificate-edges
+  ""
+  []
+  (sql/do-command
+    "CREATE TABLE certname_edges (
+       certname text NOT NULL,
+       source character varying(40) NOT NULL,
+       target character varying(40) NOT NULL,
+       type text NOT NULL)"))
+
 ;; The available migrations, as a map from migration version to migration function.
 (def migrations
   {1 initialize-store
@@ -581,7 +591,8 @@
    15 drop-duplicate-indexes
    16 drop-resource-tags-index
    17 use-bigint-instead-of-catalog-hash
-   18 add-index-on-exported-column})
+   18 add-index-on-exported-column
+   19 collapse-down-to-certificate-edges})
 
 (def desired-schema-version (apply max (keys migrations)))
 

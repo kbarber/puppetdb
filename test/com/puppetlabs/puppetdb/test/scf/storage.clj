@@ -187,7 +187,74 @@
 
         (is (= (query-to-vec ["SELECT hash FROM catalogs"])
               [{:hash hash}])))))
-  ;
+
+  (deftest catalog-replacement-differential
+    (testing "should do selective inserts/deletes when edges are modified just slightly"
+      (add-certname! certname)
+      (let [original-catalog (:basic catalogs)
+            original-edges   (:edges original-catalog)
+            modified-edges   (conj original-edges {:source {:type "File" :title "/etc/foobar"}
+                                                   :target {:type "File" :title "/etc/foobar/baz"}
+                                                   :relationship :before})
+            modified-catalog (assoc original-catalog :edges modified-edges)]
+        ;; Add an initial catalog, we don't care to intercept the SQL yet
+        (replace-catalog! original-catalog (now))
+
+        (testing "ensure catalog-edges-map returns a predictable value"
+          (is (= (catalog-edges-map 1)
+                 {["d9b87fb0aaafa5f56cc49e9dbfa83b1c573c6e8a"
+                   "e247f822a0f0bbbfff4fe066ce4a077f9c03cdb1"
+                   "contains"] nil,
+                  ["d9b87fb0aaafa5f56cc49e9dbfa83b1c573c6e8a"
+                   "57495b553981551c5194a21b9a26554cd93db3d9"
+                   "contains"] nil,
+                  ["57495b553981551c5194a21b9a26554cd93db3d9"
+                   "e247f822a0f0bbbfff4fe066ce4a077f9c03cdb1"
+                   "required-by"] nil})))
+
+        ;; Lets intercept the insert/update/delete level so we can test it later
+        (let [deletes (atom {})
+              updates (atom #{})
+              adds (atom {})
+              sql-insert sql/insert-rows
+              sql-update sql/update-values
+              sql-delete sql/delete-rows]
+          ;; Ensuring here that new records are inserted, updated
+          ;; facts are updated (not deleted and inserted) and that
+          ;; the necessary deletes happen
+          (with-redefs [sql/insert-rows    (fn [table & rows]
+                                             (swap! adds assoc table rows)
+                                             (apply sql-insert table rows))
+                        sql/update-values  (fn [table clause values]
+                                             (swap! updates conj values)
+                                             (sql-update table clause values))
+                        sql/delete-rows    (fn [table clause]
+                                             (swap! deletes assoc table clause)
+                                             (sql-delete table clause))]
+            (replace-catalog! modified-catalog (now))
+
+            (testing "ensure catalog-edges-map returns a predictable value"
+              (is (= (catalog-edges-map 1)
+                     {["57495b553981551c5194a21b9a26554cd93db3d9"
+                       "e247f822a0f0bbbfff4fe066ce4a077f9c03cdb1"
+                       "before"] nil,
+                      ["d9b87fb0aaafa5f56cc49e9dbfa83b1c573c6e8a"
+                       "e247f822a0f0bbbfff4fe066ce4a077f9c03cdb1"
+                       "contains"] nil,
+                      ["d9b87fb0aaafa5f56cc49e9dbfa83b1c573c6e8a"
+                       "57495b553981551c5194a21b9a26554cd93db3d9"
+                       "contains"] nil,
+                      ["57495b553981551c5194a21b9a26554cd93db3d9"
+                       "e247f822a0f0bbbfff4fe066ce4a077f9c03cdb1"
+                       "required-by"] nil})))
+
+            (testing "should only delete the 1 edge"
+              (is (= {:edges [1 "asdf" "fdsa" "foo"]}
+                     @deletes)))
+            (testing "should only insert the 1 edge"
+              (is (= {:edges [2 "57495b553981551c5194a21b9a26554cd93db3d9" "e247f822a0f0bbbfff4fe066ce4a077f9c03cdb1" "before"]}
+                     @adds))))))))
+
   (deftest catalog-duplicates
     (testing "should share structure when duplicate catalogs are detected for the same host"
       (add-certname! certname)

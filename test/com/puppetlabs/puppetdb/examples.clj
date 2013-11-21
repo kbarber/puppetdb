@@ -42,22 +42,24 @@
                         {:source       {:type "File" :title "/etc/foobar"}
                          :target       {:type "File" :title "/etc/foobar/baz"}
                          :relationship :required-by}}
-    :resources        {{:type "Class" :title "foobar"}         {:type "Class" :title "foobar" :exported false}
-                       {:type "File" :title "/etc/foobar"}     {:type       "File"
-                                                                :title      "/etc/foobar"
-                                                                :exported   false
-                                                                :file       "/tmp/foo"
-                                                                :line       10
-                                                                :tags       #{"file" "class" "foobar"}
+    :resources        {{:type "Class" :title "foobar"}         {:type     "Class"
+                                                                :title    "foobar"
+                                                                :exported false}
+                       {:type "File" :title "/etc/foobar"}     {:type     "File"
+                                                                :title    "/etc/foobar"
+                                                                :exported false
+                                                                :file     "/tmp/foo"
+                                                                :line     10
+                                                                :tags     #{"file" "class" "foobar"}
                                                                 :parameters {:ensure "directory"
                                                                              :group  "root"
                                                                              :user   "root"}}
-                       {:type "File" :title "/etc/foobar/baz"} {:type       "File"
-                                                                :title      "/etc/foobar/baz"
-                                                                :exported   false
-                                                                :file       "/tmp/bar"
-                                                                :line       20
-                                                                :tags       #{"file" "class" "foobar"}
+                       {:type "File" :title "/etc/foobar/baz"} {:type     "File"
+                                                                :title    "/etc/foobar/baz"
+                                                                :exported false
+                                                                :file     "/tmp/bar"
+                                                                :line     20
+                                                                :tags     #{"file" "class" "foobar"}
                                                                 :parameters {:ensure  "directory"
                                                                              :group   "root"
                                                                              :user    "root"
