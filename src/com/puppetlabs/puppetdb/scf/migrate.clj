@@ -90,19 +90,19 @@
   particular target table will be removed."
   ([table]
     (drop-constraints table "foreign key"))
-  ([table foreign-column]
+  ([table foreign-table]
     (let [results     (query-to-vec
                         (str "SELECT constraint_name FROM information_schema.table_constraints tc "
                              "  LEFT OUTER JOIN information_schema.constraint_table_usage ctu USING (constraint_name) "
                              "  WHERE LOWER(tc.table_name) = LOWER(?) AND LOWER(tc.constraint_type) = 'foreign key' "
                              "    AND LOWER(ctu.table_name) = LOWER(?)")
-                        table foreign-column)
+                        table foreign-table)
           constraints (map :constraint_name results)]
       (if (seq constraints)
         (apply sql/do-commands
                (for [constraint constraints]
                  (format "ALTER TABLE %s DROP CONSTRAINT %s" table constraint)))
-        (throw (IllegalArgumentException. (format "No %s foreign constraint exists on the table '%s' targetting table '%s'" constraint-type table foreign column)))))))
+        (throw (IllegalArgumentException. (format "No foreign key constraint exists on the table '%s' targetting table '%s'" table foreign-table)))))))
 
 (defn initialize-store
   "Create the initial database schema."
@@ -582,13 +582,11 @@
   ""
   []
 
-  (sql/do-command
-    ;; Garbage collect to make sure there is no orphaned data, as this will no longer be handled
+  (sql/do-commands
+    ;; Garbage collect to make sure there is no orphaned data before we begin
     "DELETE FROM catalogs WHERE NOT EXISTS (SELECT * FROM certname_catalogs cc WHERE cc.catalog_id=catalogs.id)"
-    ;; TODO: not sure if we need this GC yet
-    "DELETE FROM resource_params_cache WHERE NOT EXISTS (SELECT * FROM catalog_resources cr WHERE cr.resource=resource_params_cache.resource)"
 
-    ;; Create table without constraints
+    ;; Create new catalogs table without constraints
     "CREATE TABLE catalogs_transform (
       id bigserial NOT NULL,
       hash character varying(40) NOT NULL,
@@ -611,12 +609,12 @@
   ;; TODO: this deletes too many keys
   (drop-foreign-keys "catalog_resources" "catalogs")
 
-  (sql/do-command
+  (sql/do-commands
     ;; Drop old tables certname_catalogs first to avoid constraint issues
     "DROP TABLE certname_catalogs"
     "DROP TABLE catalogs"
 
-    ;; Rename transfer table
+    ;; Rename new catalogs table
     "ALTER TABLE catalogs_transform RENAME TO catalogs"
 
     ;; Add back old indexes to new table
@@ -645,12 +643,6 @@
       ADD CONSTRAINT catalog_resources_catalog_id_fkey FOREIGN KEY (catalog_id)
           REFERENCES catalogs (id)
           ON UPDATE NO ACTION ON DELETE CASCADE"
-
-    ;; TODO: find out how we can avoid deleting this one
-    "ALTER TABLE catalog_resources
-      ADD CONSTRAINT catalog_resources_resource_fkey FOREIGN KEY (resource)
-        REFERENCES resource_params_cache (resource) MATCH SIMPLE
-        ON UPDATE NO ACTION ON DELETE CASCADE"
 
     "ALTER TABLE edges
       ADD CONSTRAINT edges_catalog_id_fkey FOREIGN KEY (catalog_id)
