@@ -41,7 +41,8 @@
      (acceptable-ciphers (System/getProperty "java.version")))
   ([jvm-version]
      (let [known-good-version "1.7.0_05"]
-       (if (pos? (compare-jvm-versions jvm-version known-good-version))
+       (if (or (pos? (compare-jvm-versions jvm-version known-good-version))
+               (re-find #"^1.6.0" jvm-version))
          ;; We're more recent than the last known-good version, and hence
          ;; are busted
          ["TLS_RSA_WITH_AES_256_CBC_SHA256"
