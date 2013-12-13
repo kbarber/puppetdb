@@ -15,6 +15,7 @@ yum_repo_path: '/opt/repository/yum/'
 build_gem: FALSE
 build_dmg: FALSE
 build_ips: FALSE
+build_pe: TRUE
 apt_host: 'apt.puppetlabs.com'
 apt_repo_url: 'http://apt.puppetlabs.com'
 apt_repo_path: '/opt/repository/incoming'
