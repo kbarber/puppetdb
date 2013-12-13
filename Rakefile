@@ -36,13 +36,8 @@ end
   Rake::Task[task].clear if Rake::Task.task_defined?(task)
 end
 
-# We establish variables used in the puppetdb tasks before hand
-if (@build and @build.build_pe) || (ENV['PE_BUILD'] and ENV['PE_BUILD'].downcase == 'true')
-  @pe = TRUE
-  ENV['PATH'] = "/opt/puppet/bin:" + ENV['PATH']
-else
-  @pe = FALSE
-end
+@pe = TRUE
+ENV['PATH'] = "/opt/puppet/bin:" + ENV['PATH']
 
 if @pe
     @install_dir = "/opt/puppet/share/puppetdb"

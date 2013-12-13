@@ -1,5 +1,5 @@
 ---
-project: 'puppetdb'
+project: 'pe-puppetdb'
 author: 'Puppet Labs'
 email: 'info@puppetlabs.com'
 homepage: 'https://github.com/puppetlabs/puppetdb'
