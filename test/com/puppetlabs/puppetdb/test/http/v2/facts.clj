@@ -290,6 +290,18 @@
                                  {:certname "baz" :name "ipaddress" :value "192.168.1.102"}
                                  {:certname "foo" :name "ipaddress" :value "192.168.1.100"}]
 
+                                ;; Subqueries using file/line
+                                ["and"
+                                 ["=" "name" "ipaddress"]
+                                 ["in" "certname" ["extract" "certname" ["select-resources"
+                                                                                ["and"
+                                                                                 ["=" "sourcefile" "/etc/puppet/modules/settings/manifests/init.pp"]
+                                                                                 ["=" "sourceline" 1]]]]]]
+
+                                [{:certname "bar" :name "ipaddress" :value "192.168.1.101"}
+                                 {:certname "baz" :name "ipaddress" :value "192.168.1.102"}
+                                 {:certname "foo" :name "ipaddress" :value "192.168.1.100"}]
+
                                 ;; No matching resources
                                 ["and"
                                  ["=" "name" "ipaddress"]

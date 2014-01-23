@@ -63,8 +63,8 @@ to the result of the form supplied to this method."
                                         "title"      "Settings"
                                         "resource"   "cc1869f0f075fc3c3e5828de9e92d65a0bf8d9ff"
                                         "exported"   false
-                                        "file" nil
-                                        "line" nil
+                                        "file"       "/etc/puppet/modules/settings/manifests/init.pp"
+                                        "line"       1
                                         "count"      1
                                         "tags"       ["class" "settings"]
                                         "parameters" {}}

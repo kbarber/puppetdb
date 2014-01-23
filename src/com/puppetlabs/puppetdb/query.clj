@@ -238,8 +238,9 @@
 
 (defmethod queryable-fields :resource
   [_ query-api-version]
+  #spy/d query-api-version
   (condp = query-api-version
-    3 (keyset resource-columns)
+    3 #spy/d (keyset resource-columns)
     2 (-> (keyset resource-columns)
         (set/union (keyset v3-renamed-resource-columns))
         (set/difference (valset v3-renamed-resource-columns)))))
