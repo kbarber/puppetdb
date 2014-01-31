@@ -5,9 +5,9 @@
 
 (ns com.puppetlabs.puppetdb.query.paging
   (:import  [com.fasterxml.jackson.core JsonParseException])
-  (:require [cheshire.core :as json]
+  (:require [com.puppetlabs.cheshire :as json]
             [clojure.string :as string])
-  (:use     [com.puppetlabs.utils :only [keyset seq-contains? parse-int order-by-expr?]]
+  (:use     [puppetlabs.kitchensink.core :only [keyset seq-contains? parse-int order-by-expr?]]
             [com.puppetlabs.jdbc :only [underscores->dashes]]
             [com.puppetlabs.http :only [parse-boolean-query-param]]
             [clojure.walk :only (keywordize-keys)]))

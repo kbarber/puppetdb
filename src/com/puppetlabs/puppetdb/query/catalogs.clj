@@ -7,7 +7,7 @@
 (ns com.puppetlabs.puppetdb.query.catalogs
   (:require [com.puppetlabs.puppetdb.query.resources :as r])
   (:use [com.puppetlabs.jdbc :only [query-to-vec underscores->dashes]]
-        [com.puppetlabs.utils :only [dissoc-if-nil mapkeys]]))
+        [puppetlabs.kitchensink.core :only [dissoc-if-nil mapkeys]]))
 
 (defn get-catalog-info
   "Given a node name, return a map of Puppet catalog information
@@ -21,8 +21,6 @@
    :post [((some-fn nil? map?) %)]}
   (let [query (str "SELECT catalog_version, transaction_uuid "
                "FROM catalogs "
-               "INNER JOIN certname_catalogs "
-               "ON certname_catalogs.catalog = catalogs.hash "
                "WHERE certname = ?")]
     (mapkeys underscores->dashes (first (query-to-vec query node)))))
 
@@ -65,15 +63,17 @@
                 "sources.title AS source_title, "
                 "targets.type AS target_type, "
                 "targets.title AS target_title, "
-                "edges.type AS relationship "
-                "FROM certname_catalogs INNER JOIN edges ON certname_catalogs.catalog = edges.catalog "
+                "e.type AS relationship "
+                "FROM edges e "
                 "INNER JOIN catalog_resources sources "
-                    "ON edges.catalog = sources.catalog "
-                    "AND source = sources.resource "
+                    "ON e.source = sources.resource "
                 "INNER JOIN catalog_resources targets "
-                    "ON edges.catalog = targets.catalog "
-                    "AND target = targets.resource "
-                "WHERE certname = ?")]
+                    "ON e.target = targets.resource "
+                "INNER JOIN catalogs c "
+                    "ON sources.catalog_id = c.id "
+                    "AND targets.catalog_id = c.id "
+                    "AND e.certname = c.certname "
+                "WHERE e.certname = ?")]
     (for [{:keys [source_type
                   source_title
                   target_type

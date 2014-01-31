@@ -1,8 +1,8 @@
 (ns com.puppetlabs.puppetdb.http.v3.events
   (:require [com.puppetlabs.http :as pl-http]
-            [com.puppetlabs.utils :as pl-utils]
+            [puppetlabs.kitchensink.core :as kitchensink]
             [com.puppetlabs.puppetdb.query.events :as query]
-            [cheshire.core :as json]
+            [com.puppetlabs.cheshire :as json]
             [ring.util.response :as rr]
             [com.puppetlabs.puppetdb.query.paging :as paging])
   (:use [net.cgrand.moustache :only [app]]
@@ -53,7 +53,7 @@
                 (params "query")
                 query-options
                 paging-options
-                (:scf-db globals))))}))
+                (:scf-read-db globals))))}))
 
 (def events-app
   "Ring app for querying events"

@@ -13,7 +13,7 @@
 ;; parameters associated with that SQL expression. For instance, a resource
 ;; query for `["=" ["node" "name"] "foo.example.com"]` will compile to:
 ;;
-;;     {:where "certname_catalogs.certname = ?"
+;;     {:where "catalogs.certname = ?"
 ;;      :params ["foo.example.com"]}
 ;;
 ;; The `where` key is then inserted into a template query to return
@@ -62,8 +62,8 @@
 (ns com.puppetlabs.puppetdb.query
   (:require [clojure.string :as string]
             [clojure.set :as set])
-  (:use [com.puppetlabs.utils :only [parse-number keyset valset order-by-expr?]]
-        [com.puppetlabs.puppetdb.scf.storage :only [db-serialize sql-as-numeric sql-array-query-string sql-regexp-match sql-regexp-array-match]]
+  (:use [puppetlabs.kitchensink.core :only [parse-number keyset valset order-by-expr?]]
+        [com.puppetlabs.puppetdb.scf.storage-utils :only [db-serialize sql-as-numeric sql-array-query-string sql-regexp-match sql-regexp-array-match]]
         [com.puppetlabs.jdbc :only [valid-jdbc-query? limited-query-to-vec query-to-vec paged-sql count-sql get-result-count]]
         [com.puppetlabs.puppetdb.query.paging :only [requires-paging?]]
         [clojure.core.match :only [match]]))
@@ -202,7 +202,7 @@
 
 ;; This map's keys are the queryable fields for resources, and the values are the
 ;;  corresponding table names where the fields reside
-(def resource-columns {"certname"   "certname_catalogs"
+(def resource-columns {"certname"   "catalogs"
                        "catalog"    "catalog_resources"
                        "resource"   "catalog_resources"
                        "type"       "catalog_resources"
@@ -295,7 +295,13 @@
   [ops query]
   {:post [valid-jdbc-query? %]}
   (let [{:keys [where params]} (compile-term ops query)
-        sql (format "SELECT %s FROM catalog_resources JOIN certname_catalogs USING(catalog) WHERE %s" (column-map->sql resource-columns) where)]
+        sql (format "SELECT %s
+                       FROM (SELECT c.hash as catalog, catalog_id, resource,
+                                   type, title, tags, exported, file, line
+                               FROM catalog_resources cr, catalogs c
+                               WHERE c.id = cr.catalog_id) AS catalog_resources
+                       JOIN catalogs ON catalog_resources.catalog_id = catalogs.id WHERE %s"
+                    (column-map->sql resource-columns) where)]
     (apply vector sql params)))
 
 (defn fact-query->sql
@@ -333,21 +339,21 @@
 
          ;; node join.
          ["certname"]
-         {:where  "certname_catalogs.certname = ?"
+         {:where  "catalogs.certname = ?"
           :params [value]}
 
          ;; {in,}active nodes.
          [["node" "active"]]
          {
-           :where (format "certname_catalogs.certname IN (SELECT name FROM certnames WHERE deactivated IS %s)" (if value "NULL" "NOT NULL"))}
+           :where (format "catalogs.certname IN (SELECT name FROM certnames WHERE deactivated IS %s)" (if value "NULL" "NOT NULL"))}
 
          ;; param joins.
-         [["parameter" (name :when string?)]]
+         [["parameter" (name :guard string?)]]
          {:where  "catalog_resources.resource IN (SELECT rp.resource FROM resource_params rp WHERE rp.name = ? AND rp.value = ?)"
           :params [name (db-serialize value)]}
 
          ;; metadata match.
-         [(metadata :when #{"catalog" "resource" "type" "title" "tags" "exported" "file" "line"})]
+         [(metadata :guard #{"catalog" "resource" "type" "title" "tags" "exported" "file" "line"})]
            {:where  (format "catalog_resources.%s = ?" metadata)
             :params [value]}
 
@@ -403,11 +409,11 @@
 
          ;; node join.
          ["certname"]
-         {:where  (sql-regexp-match "certname_catalogs.certname")
+         {:where  (sql-regexp-match "catalogs.certname")
           :params [pattern]}
 
          ;; metadata match.
-         [(metadata :when #{"type" "title" "exported" "file"})]
+         [(metadata :guard #{"type" "title" "exported" "file"})]
          {:where  (sql-regexp-match (format "catalog_resources.%s" metadata))
           :params [pattern]}
 
@@ -506,7 +512,7 @@
   {:post [(map? %)
           (string? (:where %))]}
   (match [path]
-         [["fact" (name :when string?)]]
+         [["fact" (name :guard string?)]]
          {:where  "certnames.name IN (SELECT cf.certname FROM certname_facts cf WHERE cf.name = ? AND cf.value = ?)"
           :params [name (str value)]}
          [["node" "active"]]
@@ -525,7 +531,7 @@
          ["name"]
          {:where "certnames.name = ?"
           :params [value]}
-         [["fact" (name :when string?)]]
+         [["fact" (name :guard string?)]]
          {:where  "certnames.name IN (SELECT cf.certname FROM certname_facts cf WHERE cf.name = ? AND cf.value = ?)"
           :params [name (str value)]}
          [["node" "active"]]
@@ -548,7 +554,7 @@
            {:where (sql-regexp-match "certnames.name")
             :params [pattern]}
 
-           [["fact" (name :when string?)]]
+           [["fact" (name :guard string?)]]
            {:where (format "certnames.name IN (SELECT cf.certname FROM certname_facts cf WHERE cf.name = ? AND %s)" (sql-regexp-match "cf.value"))
             :params [name pattern]}
 
@@ -561,7 +567,7 @@
           (string? (:where %))]}
   (if-let [number (parse-number (str value))]
     (match [path]
-           [["fact" (name :when string?)]]
+           [["fact" (name :guard string?)]]
            {:where  (format "certnames.name IN (SELECT cf.certname FROM certname_facts cf WHERE cf.name = ? AND %s %s ?)" (sql-as-numeric "cf.value") op)
             :params [name number]}
 

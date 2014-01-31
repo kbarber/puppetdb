@@ -39,12 +39,12 @@
     []
     {:get (comp
             (fn [{:keys [params globals]}]
-              (search-nodes (params "query") (:scf-db globals)))
+              (search-nodes (params "query") (:scf-read-db globals)))
             http-q/restrict-query-to-active-nodes)}
 
     [node]
     {:get (fn [{:keys [globals]}]
-            (node-status node (:scf-db globals)))}
+            (node-status node (:scf-read-db globals)))}
 
     [node "facts" &]
     (comp f/facts-app (partial http-q/restrict-query-to-node node))

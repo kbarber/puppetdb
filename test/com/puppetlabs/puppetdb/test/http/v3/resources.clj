@@ -23,7 +23,7 @@ to the result of the form supplied to this method."
   (is (= pl-http/status-ok   (:status response)))
   (is (= c-t (get-in response [:headers "Content-Type"])))
   (is (= body (if (:body response)
-                (set (json/parse-string (:body response) true))
+                (set (json/parse-string (slurp (:body response)) true))
                 nil)) (str response)))
 
 (deftest test-resource-queries
@@ -70,7 +70,7 @@ to the result of the form supplied to this method."
       (let [order-by {:order-by (json/generate-string [{"field" "certname" "order" "DESC"}
                                                        {"field" "resource" "order" "DESC"}])}
             response (get-response nil order-by)
-            actual   (json/parse-string (get response :body "null") true)
+            actual   (json/parse-string (slurp (get response :body "null")) true)
             expected [bar2 bar1 foo2 foo1]]
         (is (= pl-http/status-ok (:status response)))
         (is (= actual expected))))))

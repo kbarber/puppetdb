@@ -4,9 +4,12 @@
   (:import (com.jolbox.bonecp BoneCPDataSource BoneCPConfig)
            (java.util.concurrent TimeUnit))
   (:require [clojure.java.jdbc :as sql]
+            [clojure.java.jdbc.internal :as jint]
             [clojure.string :as string]
             [clojure.tools.logging :as log]
-            [com.puppetlabs.utils :as utils])
+            [puppetlabs.kitchensink.core :as kitchensink]
+            [clojure.string :as str]
+            [com.puppetlabs.time :as pl-time])
   (:use com.puppetlabs.jdbc.internal))
 
 
@@ -54,10 +57,10 @@
      (convert-result-arrays vec result-set))
   ([f result-set]
      (let [convert #(cond
-                     (utils/array? %) (f %)
+                     (kitchensink/array? %) (f %)
                      (isa? (class %) java.sql.Array) (f (.getArray %))
                      :else %)]
-       (map #(utils/mapvals convert %) result-set))))
+       (map #(kitchensink/mapvals convert %) result-set))))
 
 (defn add-limit-clause
   "Helper function for ensuring that a query does not return more than a certain
@@ -142,7 +145,7 @@
   for the specified terms"
   [order-by]
   {:pre [((some-fn nil? sequential?) order-by)
-         (every? utils/order-by-expr? order-by)]
+         (every? kitchensink/order-by-expr? order-by)]
    :post [(string? %)]}
   (if (empty? order-by)
     ""
@@ -168,7 +171,7 @@
          ((some-fn nil? integer?) limit)
          ((some-fn nil? integer?) offset)
          ((some-fn nil? sequential?) order-by)
-         (every? utils/order-by-expr? order-by)]
+         (every? kitchensink/order-by-expr? order-by)]
    :post [(string? %)]}
     (let [limit-clause     (if limit (format " LIMIT %s" limit) "")
           offset-clause    (if offset (format " OFFSET %s" offset) "")
@@ -207,53 +210,108 @@
       (first)
       :c))
 
+(def ^{:doc "A more clojurey way to refer to the JDBC transaction isolation levels"}
+  isolation-levels
+  {:read-committed java.sql.Connection/TRANSACTION_READ_COMMITTED
+   :repeatable-read java.sql.Connection/TRANSACTION_REPEATABLE_READ
+   :serializable java.sql.Connection/TRANSACTION_SERIALIZABLE})
+
+(defn with-transacted-connection-fn
+  "Function for creating a connection that has the specified isolation
+   level.  If one is not specified, the JDBC default will be used (read-committed)"
+  [db-spec tx-isolation-level f]
+  {:pre [(or (nil? tx-isolation-level)
+             (get isolation-levels tx-isolation-level))]}
+  (sql/with-connection db-spec
+    (when-let [isolation-level (get isolation-levels tx-isolation-level)]
+      (.setTransactionIsolation (:connection jint/*db*) isolation-level))
+     (sql/transaction
+      (f))))
+
+(defmacro with-transacted-connection'
+  "Like `clojure.java.jdbc/with-connection`, except this automatically
+  wraps `body` in a database transaction with the specified transaction 
+  isolation level.  See isolation-levels for possible values."
+  [db-spec tx-isolation-level & body]
+  `(with-transacted-connection-fn ~db-spec ~tx-isolation-level
+     (fn []
+       ~@body)))
+
 (defmacro with-transacted-connection
   "Like `clojure.java.jdbc/with-connection`, except this automatically
   wraps `body` in a database transaction."
   [db-spec & body]
-  `(sql/with-connection ~db-spec
-     (sql/transaction
-      ~@body)))
+  `(with-transacted-connection-fn ~db-spec nil
+     (fn []
+       ~@body)))
+
+(defn with-query-results-cursor*
+  "Executes the given parameterized query within a transaction,
+  producing a lazy sequence of rows. The callback `func` is executed
+  on the entire sequence.
+
+  The lazy sequence is backed by an active database cursor, and is thus
+  useful for streaming very large resultsets.
+
+  The cursor is closed when `func` returns. If an exception is thrown,
+  the query is cancelled."
+  [func sql params]
+  (sql/transaction
+   (with-open [stmt (.prepareStatement (sql/connection) sql)]
+     (doseq [[index value] (map vector (iterate inc 1) params)]
+       (.setObject stmt index value))
+     (.setFetchSize stmt 500)
+     (with-open [rset (.executeQuery stmt)]
+       (try
+         (-> rset
+             (sql/resultset-seq)
+             (convert-result-arrays)
+             (func))
+         (catch Exception e
+           ;; Cancel the current query
+           (.cancel stmt)
+           (throw e)))))))
+
+(defmacro with-query-results-cursor
+  "Executes the given parameterized query within a transaction.
+  `body` is then executed with `rs-var` bound to the lazy sequence of
+  resulting rows. See `with-query-results-cursor*`."
+  [sql params rs-var & body]
+  `(let [func# (fn [~rs-var] (do ~@body))]
+     (with-query-results-cursor* func# ~sql ~params)))
 
 (defn make-connection-pool
   "Create a new database connection pool"
-  [{:keys [classname subprotocol subname username password
+  [{:keys [classname subprotocol subname user username password
            partition-conn-min partition-conn-max partition-count
            stats log-statements log-slow-statements
-           conn-max-age conn-lifetime conn-keep-alive]
-    :or   {partition-conn-min  1
-           partition-conn-max  50
-           partition-count     1
-           stats               true
-           ;; setting this to a String value, because that's what it would
-           ;;  be in the config file and we're manually converting it to a boolean
-           log-statements      "true"
-           log-slow-statements 10
-           conn-max-age        60
-           conn-keep-alive     45}
+           conn-max-age conn-lifetime conn-keep-alive read-only?]
     :as   db}]
   ;; Load the database driver class
   (Class/forName classname)
-  (let [log-statements? (Boolean/parseBoolean log-statements)
+  (let [log-slow-statements-duration (pl-time/to-secs log-slow-statements)
         config          (doto (new BoneCPConfig)
                           (.setDefaultAutoCommit false)
                           (.setLazyInit true)
                           (.setMinConnectionsPerPartition partition-conn-min)
                           (.setMaxConnectionsPerPartition partition-conn-max)
                           (.setPartitionCount partition-count)
+                          (.setConnectionTestStatement "begin; select 1; commit;")
                           (.setStatisticsEnabled stats)
-                          (.setIdleMaxAgeInMinutes conn-max-age)
-                          (.setIdleConnectionTestPeriodInMinutes conn-keep-alive)
+                          (.setIdleMaxAgeInMinutes (pl-time/to-minutes conn-max-age))
+                          (.setIdleConnectionTestPeriodInMinutes (pl-time/to-minutes conn-keep-alive))
                           ;; paste the URL back together from parts.
                           (.setJdbcUrl (str "jdbc:" subprotocol ":" subname))
-                          (.setConnectionHook (connection-hook log-statements? log-slow-statements)))]
+                          (.setConnectionHook (connection-hook log-statements log-slow-statements-duration))
+                          (.setDefaultReadOnly read-only?))
+        user (or user username)]
     ;; configurable without default
-    (when username (.setUsername config (str username)))
+    (when user (.setUsername config (str user)))
     (when password (.setPassword config (str password)))
-    (when conn-lifetime (.setMaxConnectionAge config conn-lifetime TimeUnit/MINUTES))
-    (when log-statements? (.setLogStatementsEnabled config log-statements?))
-    (when log-slow-statements
-      (.setQueryExecuteTimeLimit config log-slow-statements (TimeUnit/SECONDS)))
+    (when conn-lifetime (.setMaxConnectionAge config (pl-time/to-minutes conn-lifetime) TimeUnit/MINUTES))
+    (when log-statements (.setLogStatementsEnabled config log-statements))
+
+    (.setQueryExecuteTimeLimit config log-slow-statements-duration (TimeUnit/SECONDS))
     ;; ...aaand, create the pool.
     (BoneCPDataSource. config)))
 
@@ -263,3 +321,11 @@
   pool."
   [options]
   {:datasource (make-connection-pool options)})
+
+(defn in-clause
+  "Create a prepared statement in clause, with a ? for every item in coll"
+  [coll]
+  {:pre [(seq coll)]}
+  (str "in ("
+       (str/join "," (repeat (count coll) "?"))
+       ")"))

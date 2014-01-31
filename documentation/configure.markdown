@@ -1,5 +1,5 @@
 ---
-title: "PuppetDB 1.5 » Configuration"
+title: "PuppetDB 1.6 » Configuration"
 layout: default
 canonical: "/puppetdb/latest/configure.html"
 ---
@@ -9,6 +9,7 @@ canonical: "/puppetdb/latest/configure.html"
 [repl]: ./repl.html
 [postgres_ssl]: ./postgres_ssl.html
 [module]: ./install_via_module.html
+[low_catalog_dupe]: ./trouble_low_catalog_duplication.html
 
 Summary
 -----
@@ -104,7 +105,6 @@ An example configuration file:
     [global]
     vardir = /var/lib/puppetdb
     logging-config = /var/lib/puppetdb/log4j.properties
-    resource-query-limit = 20000
 
     [database]
     classname = org.postgresql.Driver
@@ -172,12 +172,6 @@ If you installed from packages, PuppetDB will use the log4j.properties file in t
 
 You can edit the logging configuration file while PuppetDB is running, and it will automatically react to changes after a few seconds.
 
-### `resource-query-limit`
-
-The maximum number of legal results that a resource query can return.  If you issue a query that would result in more results than this value, the query will simply return an error.  (This can be used to prevent accidental queries that would yield huge numbers of results from consuming undesirable amounts of resources on the server.)
-  
-The default value is 20000.
-
 ### `event-query-limit`
 
 The maximum number of legal results that a resource event query can return.  If you issue a query that would result in more results than this value, the query will simply return an error.  (This can be used to prevent accidental queries that would yield huge numbers of results from consuming undesirable amounts of resources on the server.)
@@ -190,6 +184,10 @@ The URL to query when checking for newer versions; defaults to `http://updates.p
 Overriding this setting may be useful if your PuppetDB server is firewalled and can't make external HTTP requests, in which case you could
 configure a proxy server to send requests to the `updates.puppetlabs.com` URL
 and override this setting to point to your proxy server.
+
+### `catalog-hash-conflict-debugging`
+
+When this is set to true, debugging information will be written to `<vardir>/debug/catalog-hashes` every time a catalog is received with a hash that is different than the previously received catalog for that host. Note that this should only be enabled when troubleshooting performance related issues with PuppetDB and the database server. This will output many files and could potentially slow down a production PuppetDB instance. See the [Troubleshooting Low Catalog Duplication guide][low_catalog_dupe] for more information on the outputted files and debugging this problem.
 
 `[database]` Settings
 -----
@@ -357,6 +355,78 @@ The maximum time (in minutes) a pooled connection should remain open. Any connec
 
 If not supplied, we won't terminate connections based on their age alone.
 
+`[read-database]` Settings
+-----
+
+The `[read-database]` section configures PuppetDB's _read-database_ settings, useful when running a PostgreSQL [Hot Standby](http://wiki.postgresql.org/wiki/Hot_Standby) cluster.  Currently only configuring a Postgres read-database is supported.  See the Postgres docs [here](http://wiki.postgresql.org/wiki/Hot_Standby) for details on configuring the cluster.  The `[read-database]` portion of the configuration is in addition to the `[database]` settings.  If `[read-database]` is specified, `[database]` must also be specified.
+
+To configure PuppetDB to use a read-only database from the cluster, put the following in the `[read-database]` section:
+
+    classname = org.postgresql.Driver
+    subprotocol = postgresql
+    subname = //<HOST>:<PORT>/<DATABASE>
+    username = <USERNAME>
+    password = <PASSWORD>
+
+Replace `<HOST>` with the DB server's hostname. Replace `<PORT>` with the port on which PostgreSQL is listening. Replace `<DATABASE>` with the name of the database you've created for use with PuppetDB.
+
+#### Using SSL With PostgreSQL
+
+It's possible to use SSL to protect connections to the database. There are several extra steps and considerations when doing so; see the
+[PostgreSQL SSL setup page][postgres_ssl] for complete details.
+
+The main difference in the config file is that you must be sure to add `?ssl=true` to the `subname` setting:
+
+    subname = //<HOST>:<PORT>/<DATABASE>?ssl=true
+
+### `classname`
+
+This sets the JDBC class to use. This should be `org.postgresql.Driver`.
+
+### `subprotocol`
+
+Set this to `postgresql`.
+
+### `subname`
+
+This describes where to find the database. Set this to:
+
+* `//<HOST>:<PORT>/<DATABASE>` when using PostgreSQL, replacing `<HOST>` with the DB server's hostname, `<PORT>` with the port on which PostgreSQL is listening, and `<DATABASE>` with the name of the database
+    * Append `?ssl=true` to this if your PostgreSQL server is using SSL.
+
+### `username`
+
+This is the username to use when connecting.
+
+### `password`
+
+This is the password to use when connecting.
+
+### `log-slow-statements`
+
+This sets the number of seconds before an SQL query is considered "slow." Slow SQL queries are logged as warnings, to assist in debugging and tuning. Note PuppetDB does not interrupt slow queries; it simply reports them after they complete.
+
+The default value is 10 seconds. A value of 0 will disable logging of slow queries.
+
+### `conn-max-age`
+
+The maximum time (in minutes), for a pooled connection to remain unused before it is closed off.
+
+If not supplied, we default to 60 minutes.
+
+### `conn-keep-alive`
+
+This sets the time (in minutes), for a connection to remain idle before sending a test query to the DB. This is useful to prevent a DB from timing out connections on its end.
+
+If not supplied, we default to 45 minutes.
+
+### `conn-lifetime`
+
+The maximum time (in minutes) a pooled connection should remain open. Any connections older than this setting will be closed off. Connections currently in use will not be affected until they are returned to the pool.
+
+If not supplied, we won't terminate connections based on their age alone.
+
+
 `[command-processing]` Settings
 -----
 
@@ -386,6 +456,8 @@ This setting sets the maximum amount of space in megabytes that PuppetDB's Activ
 -----
 
 The `[jetty]` section configures HTTP for PuppetDB.
+
+> **Note:** If you are using Puppet Enterprise and want to enable the PuppetDB dashboard from the PE console, refer to [Changing PuppetDB's Parameters](/pe/latest/maintain_console-db.html#changing-puppetdbs-parameters) for more information. PE users should not edit `jetty.ini`.
 
 ### `host`
 

@@ -17,14 +17,19 @@
 
 (defproject puppetdb (version-string)
   :description "Puppet-integrated catalog and fact storage"
+
+  ;; Abort when version ranges or version conflicts are detected in
+  ;; dependencies. Also supports :warn to simply emit warnings.
+  ;; requires lein 2.2.0+.
+  :pedantic? :abort
+
   :dependencies [[org.clojure/clojure "1.5.1"]
                  [cheshire "5.2.0"]
-                 [org.clojure/core.match "0.2.0-alpha9"]
+                 [org.clojure/core.match "0.2.0-rc5"]
                  [org.clojure/math.combinatorics "0.0.4"]
                  [org.clojure/tools.logging "0.2.6"]
-                 [org.clojure/tools.cli "0.2.2"]
                  [org.clojure/tools.nrepl "0.2.3"]
-                 [org.clojure/tools.namespace "0.2.4"]
+                 [puppetlabs/tools.namespace "0.2.4.1"]
                  [swank-clojure "1.4.3"]
                  [vimclojure/server "2.3.6" :exclusions [org.clojure/clojure]]
                  [clj-stacktrace "0.2.6"]
@@ -33,15 +38,12 @@
                  [org.clojure/java.jmx "0.2.0"]
                  ;; Filesystem utilities
                  [fs "1.1.2"]
-                 ;; Configuration file parsing
-                 [org.ini4j/ini4j "0.5.2"]
                  ;; Version information
                  [trptcolin/versioneer "0.1.0"]
                  ;; Job scheduling
                  [overtone/at-at "1.2.0"]
                  ;; Nicer exception handling with try+/throw+
                  [slingshot "0.10.3"]
-                 [digest "1.4.3"]
                  [log4j "1.2.17" :exclusions [javax.mail/mail
                                               javax.jms/jms
                                               com.sun.jdmk/jmxtools
@@ -51,7 +53,7 @@
                  [org.slf4j/slf4j-log4j12 "1.7.5"]
                  [org.clojure/java.jdbc "0.1.1"]
                  [org.hsqldb/hsqldb "2.2.8"]
-                 [postgresql/postgresql "9.1-901-1.jdbc4"]
+                 [org.postgresql/postgresql "9.2-1003-jdbc4"]
                  [clojureql "1.0.3"]
                  ;; MQ connectivity
                  [clamq/clamq-activemq "0.4" :exclusions [org.slf4j/slf4j-api]]
@@ -62,7 +64,20 @@
                  [ring/ring-core "1.1.8"]
                  [ring/ring-jetty-adapter "1.1.8"]
                  [org.apache.commons/commons-compress "1.4.1"]
-                 [org.bouncycastle/bcpkix-jdk15on "1.49"]]
+                 [puppetlabs/kitchensink "0.1.1"]
+                 [org.bouncycastle/bcpkix-jdk15on "1.49"]
+                 [prismatic/schema "0.2.0"]]
+
+  ;;The below test-selectors is basically using the PUPPETDB_DBTYPE
+  ;;environment variable to be the test selector.  The selector below
+  ;;will always run a test, unless it has a meta value for that
+  ;;dbtype, and that value is falsey, such as
+  ;;(deftest ^{:postgres false} my-test-name...)
+
+  :test-selectors {:default (fn [test-var-meta]
+                              (let [dbtype (keyword (or (System/getenv "PUPPETDB_DBTYPE")
+                                                        "hsql"))]
+                                (get test-var-meta dbtype true)))}
 
   :profiles {:dev {:resource-paths ["test-resources"],
                    :dependencies [[ring-mock "0.1.5"]]}}
@@ -70,5 +85,4 @@
   :jar-exclusions [#"leiningen/"]
 
   :aot [com.puppetlabs.puppetdb.core]
-  :main com.puppetlabs.puppetdb.core
-)
+  :main com.puppetlabs.puppetdb.core)

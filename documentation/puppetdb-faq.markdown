@@ -1,12 +1,14 @@
 ---
 layout: default
-title: "PuppetDB 1.5 FAQ"
+title: "PuppetDB 1.6 FAQ"
 subtitle: "Frequently Asked Questions"
 canonical: "/puppetdb/latest/puppetdb-faq.html"
 ---
 
 [trouble_kahadb]: ./trouble_kahadb_corruption.html
 [migrating]: ./migrate.html
+[maintaining_tuning]: ./maintain_and_tune.html
+[low_catalog_dupe]: ./trouble_low_catalog_duplication.html
 
 ## Can I migrate my data from ActiveRecord storeconfigs or from an existing PuppetDB to a new instance?
 
@@ -23,13 +25,13 @@ uses to authenticate clients. The latter contains the key and certificate that
 PuppetDB uses to identify itself to clients.
 
 The short answer: you can often fix these problems by reinitializing your ssl setup
-by running `/usr/sbin/puppetdb-ssl-setup -f`. Note that this script
+by running `/usr/sbin/puppetdb ssl-setup -f`. Note that this script
 must be run *after* a certificate is generated for the puppet agent (that is:
 after the agent has run once and had its certificate request signed). A common
 problem is installing PuppetDB before the Puppet agent has run, and this script
 will solve that problem, and many others.
 
-The long answer: if the `puppetdb-ssl-setup script` doesn't solve your problem
+The long answer: if the `puppetdb ssl-setup` command doesn't solve your problem
 or if you're curious what's going on under the covers, you can manage this
 configuration by hand.  The locations of the truststore and keystore files are set
 with the `keystore` and `truststore` options in the config file. There should
@@ -117,3 +119,22 @@ java.net.BindException: Cannot assign requested address
 
 PuppetDB will error with this message if the IP address associated with the ssl-host parameter in the
 jetty.ini isn't linked to a known interface - or resolvable.
+
+## Why is the load so high on the database server?
+
+There could be many reasons for a high load on the database server.
+The total number of nodes managed by Puppet, the frequency of the
+agent runs, the amount of changes to the nodes on each run etc. One
+possible cause of execessive load on the database server is a low
+catalog duplication rate. See the [PuppetDB dashboard][maintaining_tuning]
+to find this rate for your PuppetDB instance. If this rate is
+significantly lower than 90%, see [Why is my catalog duplication rate so low?][#why-is-my-catalog-duplication-rate-so-low].
+
+## Why is my catalog duplication rate so low?
+
+The catalog duplication rate can be found on the
+[dashboard][maintaining_tuning]. Typically that percentage should be
+90% or above. If that percentage is lower, it could cause a much
+heavier I/O load on the database. Refer to the [Troubleshooting Low
+Catalog Duplication guide][low_catalog_dupe] for steps to diagnose the
+problem.

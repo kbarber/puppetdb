@@ -12,7 +12,7 @@
 ;; If no facts are known for the node, the response is a 404 with an error message.
 
 (ns com.puppetlabs.puppetdb.http.v1.facts
-  (:require [cheshire.core :as json]
+  (:require [com.puppetlabs.cheshire :as json]
             [com.puppetlabs.http :as pl-http]
             [com.puppetlabs.puppetdb.query.facts :as f]
             [ring.util.response :as rr])
@@ -35,7 +35,7 @@
   (app
     [node &]
     (fn [{:keys [globals]}]
-      (retrieve-facts-for-node node (:scf-db globals)))))
+      (retrieve-facts-for-node node (:scf-read-db globals)))))
 
 (def facts-app
   (-> routes

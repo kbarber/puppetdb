@@ -1,11 +1,11 @@
 ;; ## SQL/query-related functions for events
 
 (ns com.puppetlabs.puppetdb.query.events
-  (:require [com.puppetlabs.utils :as utils]
+  (:require [puppetlabs.kitchensink.core :as kitchensink]
             [clojure.string :as string]
-            [cheshire.core :as json])
+            [com.puppetlabs.cheshire :as json])
   (:use [com.puppetlabs.jdbc :only [underscores->dashes dashes->underscores valid-jdbc-query? add-limit-clause]]
-        [com.puppetlabs.puppetdb.scf.storage :only [db-serialize sql-regexp-match]]
+        [com.puppetlabs.puppetdb.scf.storage-utils :only [db-serialize sql-regexp-match]]
         [com.puppetlabs.puppetdb.query :only [compile-term compile-and compile-or compile-not-v2 execute-query]]
         [clojure.core.match :only [match]]
         [clj-time.coerce :only [to-timestamp]]
@@ -26,7 +26,7 @@
                           "run-end-time"        "reports.end_time"
                           "report-receive-time" "reports.receive_time"}]
     (match [path]
-      [(field :when (utils/keyset timestamp-fields))]
+      [(field :guard (kitchensink/keyset timestamp-fields))]
       (if-let [timestamp (to-timestamp value)]
         {:where (format "%s %s ?" (timestamp-fields field) op)
          :params [(to-timestamp value)]}
@@ -53,14 +53,14 @@
       {:where (format "resource_events.report %s (SELECT latest_reports.report FROM latest_reports)"
                       (if value "IN" "NOT IN"))}
 
-      [(field :when #{"report" "resource_type" "resource_title" "status"})]
+      [(field :guard #{"report" "resource_type" "resource_title" "status"})]
       {:where (format "resource_events.%s = ?" field)
        :params [value] }
 
       ;; these fields allow NULL, which causes a change in semantics when
       ;; wrapped in a NOT(...) clause, so we have to be very explicit
       ;; about the NULL case.
-      [(field :when #{"property" "message" "file" "line" "containing_class"})]
+      [(field :guard #{"property" "message" "file" "line" "containing_class"})]
       (if-not (nil? value)
         {:where (format "resource_events.%s = ? AND resource_events.%s IS NOT NULL" field field)
          :params [value] }
@@ -69,7 +69,7 @@
 
       ;; these fields require special treatment for NULL (as described above),
       ;; plus a serialization step since the values can be complex data types
-      [(field :when #{"old_value" "new_value"})]
+      [(field :guard #{"old_value" "new_value"})]
       {:where (format "resource_events.%s = ? AND resource_events.%s IS NOT NULL" field field)
        :params [(db-serialize value)] }
 
@@ -90,14 +90,14 @@
         {:where (sql-regexp-match "reports.certname")
          :params [pattern]}
 
-        [(field :when #{"report" "resource_type" "resource_title" "status"})]
+        [(field :guard #{"report" "resource_type" "resource_title" "status"})]
         {:where  (sql-regexp-match (format "resource_events.%s" field))
          :params [pattern] }
 
         ;; these fields allow NULL, which causes a change in semantics when
         ;; wrapped in a NOT(...) clause, so we have to be very explicit
         ;; about the NULL case.
-        [(field :when #{"property" "message" "file" "line" "containing_class"})]
+        [(field :guard #{"property" "message" "file" "line" "containing_class"})]
         {:where (format "%s AND resource_events.%s IS NOT NULL"
                     (sql-regexp-match (format "resource_events.%s" field))
                     field)
@@ -213,7 +213,7 @@
                           paging-options)]
     (assoc results :result
       (map
-        #(-> (utils/mapkeys underscores->dashes %)
+        #(-> (kitchensink/mapkeys underscores->dashes %)
            (update-in [:old-value] json/parse-string)
            (update-in [:new-value] json/parse-string))
         (:result results)))))

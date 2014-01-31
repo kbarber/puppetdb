@@ -4,7 +4,15 @@
             [com.puppetlabs.puppetdb.report.utils :as reputils]
             [com.puppetlabs.puppetdb.reports :as report-val]
             [clojure.java.jdbc :as sql]
-            [cheshire.core :as json])
+            [com.puppetlabs.cheshire :as json]
+            [com.puppetlabs.puppetdb.scf.hash :as shash]
+            [clojure.walk :as walk]
+            [com.puppetlabs.puppetdb.scf.storage-utils :as sutils]
+            [puppetlabs.kitchensink.core :as kitchensink]
+            [slingshot.slingshot :refer [throw+]]
+            [com.puppetlabs.puppetdb.testutils :as tu]
+            [metrics.histograms :refer [sample histogram]]
+            [schema.core :as s])
   (:use [com.puppetlabs.puppetdb.examples :only [catalogs]]
         [com.puppetlabs.puppetdb.examples.reports :only [reports]]
         [com.puppetlabs.puppetdb.testutils.reports]
@@ -16,113 +24,10 @@
         [clojure.math.combinatorics :only (combinations subsets)]
         [clj-time.core :only [ago from-now now days]]
         [clj-time.coerce :only [to-timestamp to-string]]
-        [com.puppetlabs.jdbc :only [query-to-vec with-transacted-connection]]
+        [com.puppetlabs.jdbc :only [query-to-vec with-transacted-connection convert-result-arrays]]
         [com.puppetlabs.puppetdb.fixtures]))
 
 (use-fixtures :each with-test-db)
-
-(deftest serialization
-  (let [values ["foo" 0 "0" nil "nil" "null" [1 2 3] ["1" "2" "3"] {"a" 1 "b" [1 2 3]}]]
-    (testing "serialized values should deserialize to the initial value"
-      (doseq [value values]
-        (is (= (json/parse-string (db-serialize value)) value))))
-    (testing "serialized values should be unique"
-      (doseq [value1 values
-              value2 values]
-        (let [str1 (db-serialize value1)
-              str2 (db-serialize value2)]
-          (when (= value1 value2)
-            (is (= str1 str2)))
-          (when-not (= value1 value2)
-            (is (not= str1 str2)
-              (str value1 " should not serialize the same as " value2))))))))
-
-(deftest hash-computation
-  (testing "Hashes for resources"
-
-    (testing "should error on bad input"
-      (is (thrown? AssertionError (resource-identity-hash nil)))
-      (is (thrown? AssertionError (resource-identity-hash []))))
-
-    (testing "should be equal for the base case"
-      (is (= (resource-identity-hash {})
-            (resource-identity-hash {}))))
-
-    (testing "shouldn't change for identical input"
-      (doseq [i (range 10)
-              :let [r (random/random-kw-resource)]]
-        (is (= (resource-identity-hash r)
-              (resource-identity-hash r)))))
-
-    (testing "shouldn't change for equivalent input"
-      (is (= (resource-identity-hash {:foo 1 :bar 2})
-            (resource-identity-hash {:bar 2 :foo 1})))
-      (is (= (resource-identity-hash {:tags #{1 2 3}})
-            (resource-identity-hash {:tags #{3 2 1}}))))
-
-    (testing "should be different for non-equivalent resources"
-      ; Take a population of 5 resource, put them into a set to make
-      ; sure we only care about a population of unique resources, take
-      ; any 2 elements from that set, and those 2 resources should
-      ; have different hashes.
-      (let [candidates (set (repeatedly 5 random/random-kw-resource))
-            pairs      (combinations candidates 2)]
-        (doseq [[r1 r2] pairs]
-          (is (not= (resource-identity-hash r1)
-                (resource-identity-hash r2))))))))
-
-(deftest catalog-dedupe
-  (testing "Catalogs with the same metadata but different content should have different hashes"
-    (let [catalog       (:basic catalogs)
-          hash          (catalog-similarity-hash catalog)
-          ;; List of all the tweaking functions
-          chaos-monkeys [catutils/add-random-resource-to-catalog
-                         catutils/mod-resource-in-catalog
-                         catutils/mod-resource-metadata-in-catalog
-                         catutils/add-random-edge-to-catalog
-                         catutils/swap-edge-targets-in-catalog]
-          ;; Function that will apply a random tweak function
-          apply-monkey  #((rand-nth chaos-monkeys) %)]
-
-      (is (not= hash (catalog-similarity-hash (catutils/add-random-resource-to-catalog catalog))))
-      (is (not= hash (catalog-similarity-hash (catutils/mod-resource-in-catalog catalog))))
-      (is (not= hash (catalog-similarity-hash (catutils/mod-resource-metadata-in-catalog catalog))))
-      (is (not= hash (catalog-similarity-hash (catutils/add-random-edge-to-catalog catalog))))
-
-      ;; Do the following 100 times: pick up to 10 tweaking functions,
-      ;; successively apply them all to the original catalog, and
-      ;; verify that the hash of the resulting catalog is the same as
-      ;; the hash of the original catalog
-      (doseq [nmonkeys (repeatedly 100 #(inc (rand-int 10)))
-              :let [tweaked-catalog (nth (iterate apply-monkey catalog) nmonkeys)
-                    tweaked-hash    (catalog-similarity-hash tweaked-catalog)]]
-        (if (= catalog tweaked-catalog)
-          (is (= hash tweaked-hash)
-            (str catalog "\n has hash: " hash "\n and \n" tweaked-catalog "\n has hash: " tweaked-hash))
-          (is (not= hash tweaked-hash)
-            (str catalog "\n has hash: " hash "\n and \n" tweaked-catalog "\n has hash: " tweaked-hash))))))
-
-  (testing "Catalogs with different metadata but the same content should have the same hashes"
-    (let [catalog            (:basic catalogs)
-          hash               (catalog-similarity-hash catalog)
-          ;; Functions that tweak various attributes of a catalog
-          tweak-api-version  #(assoc % :api-version (inc (:api-version %)))
-          tweak-version      #(assoc % :version (str (:version %) "?"))
-          tweak-puppetdb-version #(assoc % :puppetdb-version (inc (:puppetdb-version %)))
-          ;; List of all the tweaking functions
-          chaos-monkeys      [tweak-api-version tweak-version tweak-puppetdb-version]
-          ;; Function that will apply a random tweak function
-          apply-monkey       #((rand-nth chaos-monkeys) %)]
-
-      ;; Do the following 100 times: pick up to 10 tweaking functions,
-      ;; successively apply them all to the original catalog, and
-      ;; verify that the hash of the resulting catalog is the same as
-      ;; the hash of the original catalog
-      (doseq [nmonkeys (repeatedly 100 #(inc (rand-int 10)))
-              :let [tweaked-catalog (nth (iterate apply-monkey catalog) nmonkeys)
-                    tweaked-hash    (catalog-similarity-hash tweaked-catalog)]]
-        (is (= hash tweaked-hash)
-          (str catalog "\n has hash: " hash "\n and \n" tweaked-catalog "\n has hash: " tweaked-hash))))))
 
 (deftest fact-persistence
   (testing "Persisted facts"
@@ -133,253 +38,706 @@
                  "kernel" "Linux"
                  "operatingsystem" "Debian"}]
       (add-certname! certname)
-      (add-facts! certname facts (now))
+
+      (is (nil?
+           (sql/transaction
+            (certname-facts-metadata! "some_certname"))))
+      (is (empty? (cert-fact-map "some_certname")))
+      
+      (add-facts! certname facts (-> 2 days ago))
       (testing "should have entries for each fact"
         (is (= (query-to-vec "SELECT certname, name, value FROM certname_facts ORDER BY name")
-              [{:certname certname :name "domain" :value "mydomain.com"}
-               {:certname certname :name "fqdn" :value "myhost.mydomain.com"}
-               {:certname certname :name "hostname" :value "myhost"}
-               {:certname certname :name "kernel" :value "Linux"}
-               {:certname certname :name "operatingsystem" :value "Debian"}])))
+               [{:certname certname :name "domain" :value "mydomain.com"}
+                {:certname certname :name "fqdn" :value "myhost.mydomain.com"}
+                {:certname certname :name "hostname" :value "myhost"}
+                {:certname certname :name "kernel" :value "Linux"}
+                {:certname certname :name "operatingsystem" :value "Debian"}]))
+
+        (is (sql/transaction
+             (certname-facts-metadata! "some_certname")))
+        (is (= facts (cert-fact-map "some_certname"))))
+      
       (testing "should add the certname if necessary"
         (is (= (query-to-vec "SELECT name FROM certnames")
-              [{:name certname}])))
+               [{:name certname}])))
       (testing "replacing facts"
-        (let [new-facts {"domain" "mynewdomain.com"
-                         "fqdn" "myhost.mynewdomain.com"
-                         "hostname" "myhost"
-                         "kernel" "Linux"
-                         "uptime_seconds" "3600"}]
-          (replace-facts! {"name"  certname "values" new-facts} (now))
-          (testing "should have only the new facts"
-            (is (= (query-to-vec "SELECT name, value FROM certname_facts ORDER BY name")
-                  [{:name "domain" :value "mynewdomain.com"}
-                   {:name "fqdn" :value "myhost.mynewdomain.com"}
-                   {:name "hostname" :value "myhost"}
-                   {:name "kernel" :value "Linux"}
-                   {:name "uptime_seconds" :value "3600"}]))))))))
+        ;;Ensuring here that new records are inserted, updated
+        ;;facts are updated (not deleted and inserted) and that
+        ;;the necessary deletes happen
+        (tu/with-wrapped-fn-args [adds sql/insert-records
+                                  updates sql/update-values
+                                  deletes sql/delete-rows]
+          (let [new-facts {"domain" "mynewdomain.com"
+                           "fqdn" "myhost.mynewdomain.com"
+                           "hostname" "myhost"
+                           "kernel" "Linux"
+                           "uptime_seconds" "3600"}]
+            (replace-facts! {"name"  certname "values" new-facts} (now))
+            (testing "should have only the new facts"
+              (is (= (query-to-vec "SELECT name, value FROM certname_facts ORDER BY name")
+                     [{:name "domain" :value "mynewdomain.com"}
+                      {:name "fqdn" :value "myhost.mynewdomain.com"}
+                      {:name "hostname" :value "myhost"}
+                      {:name "kernel" :value "Linux"}
+                      {:name "uptime_seconds" :value "3600"}])))
+            (testing "should only delete operatingsystem key"
+              (is (= [[:certname_facts ["certname=? and name in (?)" "some_certname" "operatingsystem"]]]
+                     @deletes)))
+            (testing "should update existing keys"
+              (is (some #{[:certname_facts ["certname=? and name=?" "some_certname" "domain"] {:value "mynewdomain.com"}]} @updates))
+              (is (some #{[:certname_facts ["certname=? and name=?" "some_certname" "fqdn"] {:value "myhost.mynewdomain.com"}]} @updates))
+              (is (some (fn [update-call]
+                          (and (= :certname_facts_metadata (first update-call))
+                               (:timestamp (last update-call)))) @updates)))
+            (testing "should only insert uptime_seconds"
+              (is (= [[:certname_facts {:value "3600", :name "uptime_seconds", :certname "some_certname"}]]
+                     @adds))))))
 
+      (testing "replacing all new facts"
+        (delete-facts! certname)
+        (replace-facts! {"name" certname
+                         "values" facts} (now))
+        (is (= facts (cert-fact-map "some_certname"))))
 
-(let [catalog  (:basic catalogs)
-      certname (:certname catalog)]
+      (testing "replacing all facts with new ones"
+        (delete-facts! certname)
+        (add-facts! certname facts (-> 2 days ago))
+        (replace-facts! {"name" certname
+                         "values" {"foo" "bar"}} (now))
+        (is (= {"foo" "bar"} (cert-fact-map "some_certname"))))
+      
+      (testing "replace-facts with only additions"
+        (let [fact-map (cert-fact-map "some_certname")]
+          (replace-facts! {"name" certname
+                           "values" (assoc fact-map "one more" "here")} (now))
+          (is (= (assoc fact-map  "one more" "here")
+                 (cert-fact-map "some_certname")))))
 
-  (deftest catalog-persistence
-    (testing "Persisted catalogs"
+      (testing "replace-facts with no change"
+        (let [fact-map (cert-fact-map "some_certname")]
+          (replace-facts! {"name" certname
+                           "values" fact-map} (now))
+          (is (= fact-map
+                 (cert-fact-map "some_certname"))))))))
 
-      (add-certname! certname)
-      (let [hash (add-catalog! catalog)]
-        (associate-catalog-with-certname! hash certname (now)))
+(def catalog (:basic catalogs))
+(def certname (:certname catalog))
 
-      (testing "should contain proper catalog metadata"
-        (is (= (query-to-vec ["SELECT cr.certname, c.api_version, c.catalog_version FROM catalogs c, certname_catalogs cr WHERE cr.catalog=c.hash"])
-              [{:certname certname :api_version 1 :catalog_version "123456789"}])))
+(deftest catalog-persistence
+  (testing "Persisted catalogs"
+    (add-certname! certname)
+    (add-catalog! catalog)
 
-      (testing "should contain a complete edges list"
-        (is (= (query-to-vec [(str "SELECT r1.type as stype, r1.title as stitle, r2.type as ttype, r2.title as ttitle, e.type as etype "
-                                "FROM edges e, catalog_resources r1, catalog_resources r2 "
-                                "WHERE e.source=r1.resource AND e.target=r2.resource "
-                                "ORDER BY r1.type, r1.title, r2.type, r2.title, e.type")])
-              [{:stype "Class" :stitle "foobar" :ttype "File" :ttitle "/etc/foobar" :etype "contains"}
-               {:stype "Class" :stitle "foobar" :ttype "File" :ttitle "/etc/foobar/baz" :etype "contains"}
-               {:stype "File" :stitle "/etc/foobar" :ttype "File" :ttitle "/etc/foobar/baz" :etype "required-by"}])))
+    (testing "should contain proper catalog metadata"
+      (is (= (query-to-vec ["SELECT certname, api_version, catalog_version FROM catalogs"])
+             [{:certname certname :api_version 1 :catalog_version "123456789"}])))
 
-      (testing "should contain a complete resources list"
-        (is (= (query-to-vec ["SELECT type, title FROM catalog_resources ORDER BY type, title"])
-              [{:type "Class" :title "foobar"}
-               {:type "File" :title "/etc/foobar"}
-               {:type "File" :title "/etc/foobar/baz"}]))
+    (testing "should contain a complete edges list"
+      (is (= (query-to-vec [(str "SELECT r1.type as stype, r1.title as stitle, r2.type as ttype, r2.title as ttitle, e.type as etype "
+                                 "FROM edges e, catalog_resources r1, catalog_resources r2 "
+                                 "WHERE e.source=r1.resource AND e.target=r2.resource "
+                                 "ORDER BY r1.type, r1.title, r2.type, r2.title, e.type")])
+             [{:stype "Class" :stitle "foobar" :ttype "File" :ttitle "/etc/foobar" :etype "contains"}
+              {:stype "Class" :stitle "foobar" :ttype "File" :ttitle "/etc/foobar/baz" :etype "contains"}
+              {:stype "File" :stitle "/etc/foobar" :ttype "File" :ttitle "/etc/foobar/baz" :etype "required-by"}])))
 
-        (testing "properly associated with the host"
-          (is (= (query-to-vec ["SELECT cc.certname, cr.type, cr.title FROM catalog_resources cr, certname_catalogs cc WHERE cc.catalog=cr.catalog ORDER BY cr.type, cr.title"])
-                [{:certname certname :type "Class" :title "foobar"}
-                 {:certname certname :type "File"  :title "/etc/foobar"}
-                 {:certname certname :type "File"  :title "/etc/foobar/baz"}])))
+    (testing "should contain a complete resources list"
+      (is (= (query-to-vec ["SELECT type, title FROM catalog_resources ORDER BY type, title"])
+             [{:type "Class" :title "foobar"}
+              {:type "File" :title "/etc/foobar"}
+              {:type "File" :title "/etc/foobar/baz"}]))
 
-        (testing "with all parameters"
-          (is (= (query-to-vec ["SELECT cr.type, cr.title, rp.name, rp.value FROM catalog_resources cr, resource_params rp WHERE rp.resource=cr.resource ORDER BY cr.type, cr.title, rp.name"])
-                [{:type "File" :title "/etc/foobar" :name "ensure" :value (db-serialize "directory")}
-                 {:type "File" :title "/etc/foobar" :name "group" :value (db-serialize "root")}
-                 {:type "File" :title "/etc/foobar" :name "user" :value (db-serialize "root")}
-                 {:type "File" :title "/etc/foobar/baz" :name "ensure" :value (db-serialize "directory")}
-                 {:type "File" :title "/etc/foobar/baz" :name "group" :value (db-serialize "root")}
-                 {:type "File" :title "/etc/foobar/baz" :name "require" :value (db-serialize "File[/etc/foobar]")}
-                 {:type "File" :title "/etc/foobar/baz" :name "user" :value (db-serialize "root")}])))
+      (testing "properly associated with the host"
+        (is (= (query-to-vec ["SELECT c.certname, cr.type, cr.title
+                                 FROM catalog_resources cr, catalogs c
+                                 WHERE c.id=cr.catalog_id
+                                 ORDER BY cr.type, cr.title"])
+               [{:certname certname :type "Class" :title "foobar"}
+                {:certname certname :type "File"  :title "/etc/foobar"}
+                {:certname certname :type "File"  :title "/etc/foobar/baz"}])))
 
-        (testing "with all metadata"
-          (let [result (query-to-vec ["SELECT cr.type, cr.title, cr.exported, cr.tags, cr.file, cr.line FROM catalog_resources cr ORDER BY cr.type, cr.title"])]
-            (is (= (map #(assoc % :tags (sort (:tags %))) result)
-                  [{:type "Class" :title "foobar" :tags [] :exported false :file nil :line nil}
-                   {:type "File" :title "/etc/foobar" :tags ["class" "file" "foobar"] :exported false :file "/tmp/foo" :line 10}
-                   {:type "File" :title "/etc/foobar/baz" :tags ["class" "file" "foobar"] :exported false :file "/tmp/bar" :line 20}])))))))
+      (testing "with all parameters"
+        (is (= (query-to-vec ["SELECT cr.type, cr.title, rp.name, rp.value FROM catalog_resources cr, resource_params rp WHERE rp.resource=cr.resource ORDER BY cr.type, cr.title, rp.name"])
+               [{:type "File" :title "/etc/foobar" :name "ensure" :value (sutils/db-serialize "directory")}
+                {:type "File" :title "/etc/foobar" :name "group" :value (sutils/db-serialize "root")}
+                {:type "File" :title "/etc/foobar" :name "user" :value (sutils/db-serialize "root")}
+                {:type "File" :title "/etc/foobar/baz" :name "ensure" :value (sutils/db-serialize "directory")}
+                {:type "File" :title "/etc/foobar/baz" :name "group" :value (sutils/db-serialize "root")}
+                {:type "File" :title "/etc/foobar/baz" :name "require" :value (sutils/db-serialize "File[/etc/foobar]")}
+                {:type "File" :title "/etc/foobar/baz" :name "user" :value (sutils/db-serialize "root")}])))
 
-  (deftest catalog-replacement
-    (testing "should noop if replaced by themselves"
-      (add-certname! certname)
-      (let [hash (add-catalog! catalog)]
-        (replace-catalog! catalog (now))
+      (testing "with all metadata"
+        (let [result (query-to-vec ["SELECT cr.type, cr.title, cr.exported, cr.tags, cr.file, cr.line FROM catalog_resources cr ORDER BY cr.type, cr.title"])]
+          (is (= (map #(assoc % :tags (sort (:tags %))) result)
+                 [{:type "Class" :title "foobar" :tags [] :exported false :file nil :line nil}
+                  {:type "File" :title "/etc/foobar" :tags ["class" "file" "foobar"] :exported false :file "/tmp/foo" :line 10}
+                  {:type "File" :title "/etc/foobar/baz" :tags ["class" "file" "foobar"] :exported false :file "/tmp/bar" :line 20}])))))))
 
-        (is (= (query-to-vec ["SELECT name FROM certnames"])
-              [{:name certname}]))
-
-        (is (= (query-to-vec ["SELECT hash FROM catalogs"])
-              [{:hash hash}])))))
-  ;
-  (deftest catalog-duplicates
-    (testing "should share structure when duplicate catalogs are detected for the same host"
-      (add-certname! certname)
-      (let [hash (add-catalog! catalog)
-            prev-dupe-num (.count (:duplicate-catalog metrics))
-            prev-new-num  (.count (:new-catalog metrics))]
-
-        ;; Do an initial replacement with the same catalog
-        (replace-catalog! catalog (now))
-        (is (= 1 (- (.count (:duplicate-catalog metrics)) prev-dupe-num)))
-        (is (= 0 (- (.count (:new-catalog metrics)) prev-new-num)))
-
-        ;; Store a second catalog, with the same content save the version
-        (replace-catalog! (assoc catalog :version "abc123") (now))
-        (is (= 2 (- (.count (:duplicate-catalog metrics)) prev-dupe-num)))
-        (is (= 0 (- (.count (:new-catalog metrics)) prev-new-num)))
-
-        (is (= (query-to-vec ["SELECT name FROM certnames"])
-              [{:name certname}]))
-
-        (is (= (query-to-vec ["SELECT certname FROM certname_catalogs"])
-              [{:certname certname}]))
-
-        (is (= (query-to-vec ["SELECT hash FROM catalogs"])
-              [{:hash hash}])))))
-
-  (deftest catalog-empty
-    (testing "should not fail when inserting an 'empty' catalog"
-      (add-catalog! (:empty catalogs))))
-
-  (deftest catalog-manual-deletion
-    (testing "should noop if replaced by themselves after using manual deletion"
-      (add-certname! certname)
-      (add-catalog! catalog)
-      (delete-catalog! certname)
-      (add-catalog! catalog)
-
-      (is (= (query-to-vec ["SELECT name FROM certnames"])
-            [{:name certname}]))))
-
-  (deftest catalog-deletion-verify
-    (testing "should be removed when deleted"
-      (add-certname! certname)
-      (let [hash (add-catalog! catalog)]
-        (delete-catalog! hash))
-
-      (is (= (query-to-vec ["SELECT * FROM edges"])
-            []))
-
-      (is (= (query-to-vec ["SELECT * FROM catalog_resources"])
-            []))))
-
-  (deftest catalog-deletion-certnames
-    (testing "when deleted, should leave certnames alone"
-      (add-certname! certname)
-      (add-catalog! catalog)
-      (delete-catalog! certname)
+(deftest catalog-replacement
+  (testing "should noop if replaced by themselves"
+    (add-certname! certname)
+    (let [hash (add-catalog! catalog)]
+      (replace-catalog! catalog (now))
 
       (is (= (query-to-vec ["SELECT name FROM certnames"])
-            [{:name certname}]))))
+             [{:name certname}]))
 
-  (deftest catalog-deletion-otherhosts
-    (testing "when deleted, should leave other hosts' resources alone"
-      (add-certname! certname)
-      (add-certname! "myhost2.mydomain.com")
-      (let [hash1 (add-catalog! catalog)
-            ;; Store the same catalog for a different host
-            hash2 (add-catalog! (assoc catalog :certname "myhost2.mydomain.com"))]
-        (associate-catalog-with-certname! hash1 certname (now))
-        (associate-catalog-with-certname! hash2 "myhost2.mydomain.com" (now))
-        (delete-catalog! hash1))
+      (is (= (query-to-vec ["SELECT hash FROM catalogs"])
+             [{:hash hash}])))))
 
-      ;; myhost should still be present in the database
-      (is (= (query-to-vec ["SELECT name FROM certnames ORDER BY name"])
-            [{:name certname} {:name "myhost2.mydomain.com"}]))
+(deftest edge-replacement-differential
+  (testing "should do selective inserts/deletes when edges are modified just slightly"
+    (add-certname! certname)
+    (let [original-catalog (:basic catalogs)
+          original-edges   (:edges original-catalog)
+          modified-edges   (conj (disj original-edges {:source {:type "Class" :title "foobar"}
+                                                       :target {:type "File" :title "/etc/foobar"}
+                                                       :relationship :contains})
+                                 {:source {:type "File" :title "/etc/foobar"}
+                                  :target {:type "File" :title "/etc/foobar/baz"}
+                                  :relationship :before})
+          modified-catalog (assoc original-catalog :edges modified-edges)]
+      ;; Add an initial catalog, we don't care to intercept the SQL yet
+      (replace-catalog! original-catalog (now))
 
-      ;; myhost1 should not have any catalogs associated with it
-      ;; anymore
-      (is (= (query-to-vec ["SELECT certname FROM certname_catalogs ORDER BY certname"])
-            [{:certname "myhost2.mydomain.com"}]))
+      (testing "ensure catalog-edges-map returns a predictable value"
+        (is (= (catalog-edges-map certname)
+               {["d9b87fb0aaafa5f56cc49e9dbfa83b1c573c6e8a"
+                 "57495b553981551c5194a21b9a26554cd93db3d9"
+                 "contains"] nil,
+                 ["57495b553981551c5194a21b9a26554cd93db3d9"
+                  "e247f822a0f0bbbfff4fe066ce4a077f9c03cdb1"
+                  "required-by"] nil,
+                  ["d9b87fb0aaafa5f56cc49e9dbfa83b1c573c6e8a"
+                   "e247f822a0f0bbbfff4fe066ce4a077f9c03cdb1"
+                   "contains"] nil})))
 
-      ;; no edges for myhost
-      (is (= (query-to-vec [(str "SELECT COUNT(*) as c FROM edges e, certname_catalogs cc "
-                              "WHERE e.catalog=cc.catalog AND cc.certname=?")
-                            certname])
-            [{:c 0}]))
+      ;; Lets intercept the insert/update/delete level so we can test it later
+      ;; Here we only replace edges, so we can capture those specific SQL
+      ;; operations
+      (tu/with-wrapped-fn-args [adds sql/insert-rows
+                                deletes sql/delete-rows]
+        (let [resources    (:resources modified-catalog)
+              refs-to-hash (reduce-kv (fn [i k v]
+                                        (assoc i k (shash/resource-identity-hash v)))
+                                      {} resources)]
+          (replace-edges! certname modified-edges refs-to-hash)
+          (testing "ensure catalog-edges-map returns a predictable value"
+            (is (= (catalog-edges-map certname)
+                   {["d9b87fb0aaafa5f56cc49e9dbfa83b1c573c6e8a"
+                     "e247f822a0f0bbbfff4fe066ce4a077f9c03cdb1"
+                     "contains"] nil,
+                     ["57495b553981551c5194a21b9a26554cd93db3d9"
+                      "e247f822a0f0bbbfff4fe066ce4a077f9c03cdb1"
+                      "required-by"] nil
+                      ["57495b553981551c5194a21b9a26554cd93db3d9"
+                       "e247f822a0f0bbbfff4fe066ce4a077f9c03cdb1"
+                       "before"] nil})))
 
-      ;; All the other resources should still be there
-      (is (= (query-to-vec ["SELECT COUNT(*) as c FROM catalog_resources"])
-            [{:c 3}]))))
+          (testing "should only delete the 1 edge"
+            (is (= [[:edges ["certname=? and source=? and target=? and type=?"
+                             "basic.catalogs.com"
+                             "d9b87fb0aaafa5f56cc49e9dbfa83b1c573c6e8a"
+                             "57495b553981551c5194a21b9a26554cd93db3d9"
+                             "contains"]]]
+                   @deletes)))
+          (testing "should only insert the 1 edge"
+            (is (= [[:edges ["basic.catalogs.com"
+                             "57495b553981551c5194a21b9a26554cd93db3d9"
+                             "e247f822a0f0bbbfff4fe066ce4a077f9c03cdb1"
+                             "before"]]]
+                   @adds)))
+          (testing "when reran to check for idempotency"
+            (reset! adds [])
+            (reset! deletes [])
+            (replace-edges! certname modified-edges refs-to-hash)
+            (testing "should delete no edges"
+              (is (empty? @deletes)))
+            (testing "should insert no edges"
+              (is (empty?@adds)))))))))
 
-  (deftest catalog-delete-without-gc
-    (testing "when deleted without GC, should leave params"
-      (add-certname! certname)
-      (let [hash1 (add-catalog! catalog)]
-        (associate-catalog-with-certname! hash1 certname (now))
-        (delete-catalog! hash1))
+(deftest catalog-duplicates
+  (testing "should share structure when duplicate catalogs are detected for the same host"
+    (add-certname! certname)
+    (let [hash (add-catalog! catalog)
+          prev-dupe-num (.count (:duplicate-catalog metrics))
+          prev-new-num  (.count (:updated-catalog metrics))]
 
-      ;; All the params should still be there
-      (is (= (query-to-vec ["SELECT COUNT(*) as c FROM resource_params"])
-            [{:c 7}]))))
+      ;; Do an initial replacement with the same catalog
+      (replace-catalog! catalog (now))
+      (is (= 1 (- (.count (:duplicate-catalog metrics)) prev-dupe-num)))
+      (is (= 0 (- (.count (:updated-catalog metrics)) prev-new-num)))
 
-  (deftest catalog-delete-with-gc
-    (testing "when deleted and GC'ed, should leave no dangling params or edges"
-      (add-certname! certname)
-      (let [hash1 (add-catalog! catalog)]
-        (associate-catalog-with-certname! hash1 certname (now))
-        (delete-catalog! hash1))
-      (garbage-collect!)
+      ;; Store a second catalog, with the same content save the version
+      (replace-catalog! (assoc catalog :version "abc123") (now))
+      (is (= 2 (- (.count (:duplicate-catalog metrics)) prev-dupe-num)))
+      (is (= 0 (- (.count (:updated-catalog metrics)) prev-new-num)))
 
-      (is (= (query-to-vec ["SELECT * FROM resource_params"])
-            []))
-      (is (= (query-to-vec ["SELECT * FROM edges"])
-            []))))
+      (is (= (query-to-vec ["SELECT name FROM certnames"])
+             [{:name certname}]))
 
-  (deftest catalog-dissociation-without-gc
-    (testing "when dissociated and not GC'ed, should still exist"
-      (add-certname! certname)
-      (let [hash1 (add-catalog! catalog)]
-        (associate-catalog-with-certname! hash1 certname (now))
-        (dissociate-catalog-with-certname! hash1 certname))
+      (is (= (query-to-vec ["SELECT certname, hash FROM catalogs"])
+             [{:hash hash
+               :certname certname}]))
 
-      (is (= (query-to-vec ["SELECT * FROM certname_catalogs"])
-            []))
+      (replace-catalog! (assoc-in catalog [:resources {:type "File" :title "/etc/foobar"} :line] 20) (now))
+      (is (= 2 (- (.count (:duplicate-catalog metrics)) prev-dupe-num)))
+      (is (= 1 (- (.count (:updated-catalog metrics)) prev-new-num))))))
 
-      (is (= (query-to-vec ["SELECT COUNT(*) as c FROM catalogs"])
-            [{:c 1}]))))
+(deftest catalog-manual-deletion
+  (testing "should noop if replaced by themselves after using manual deletion"
+    (add-certname! certname)
+    (add-catalog! catalog)
+    (delete-catalog! certname)
+    (add-catalog! catalog)
 
-  (deftest catalog-dissociation-with-gc
-    (testing "when dissociated and GC'ed, should no longer exist"
-      (add-certname! certname)
-      (let [hash1 (add-catalog! catalog)]
-        (associate-catalog-with-certname! hash1 certname (now))
-        (dissociate-catalog-with-certname! hash1 certname))
-      (garbage-collect!)
+    (is (= (query-to-vec ["SELECT name FROM certnames"])
+           [{:name certname}]))))
 
-      (is (= (query-to-vec ["SELECT * FROM certname_catalogs"])
-            []))
+(deftest catalog-deletion-verify
+  (testing "should be removed when deleted"
+    (add-certname! certname)
+    (let [hash (add-catalog! catalog)]
+      (delete-catalog! hash))
 
-      (is (= (query-to-vec ["SELECT * FROM catalogs"])
-            [])))))
+    (is (= (query-to-vec ["SELECT * FROM catalog_resources"])
+           []))))
+
+(deftest catalog-deletion-certnames
+  (testing "when deleted, should leave certnames alone"
+    (add-certname! certname)
+    (add-catalog! catalog)
+    (delete-catalog! certname)
+
+    (is (= (query-to-vec ["SELECT name FROM certnames"])
+           [{:name certname}]))))
+
+(deftest catalog-deletion-otherhosts
+  (testing "when deleted, should leave other hosts' resources alone"
+    (add-certname! certname)
+    (add-certname! "myhost2.mydomain.com")
+    (let [hash1 (add-catalog! catalog)
+          ;; Store the same catalog for a different host
+          hash2 (add-catalog! (assoc catalog :certname "myhost2.mydomain.com"))]
+      (delete-catalog! hash1))
+
+    ;; myhost should still be present in the database
+    (is (= (query-to-vec ["SELECT name FROM certnames ORDER BY name"])
+           [{:name certname} {:name "myhost2.mydomain.com"}]))
+
+    ;; myhost1 should not have any catalogs associated with it
+    ;; anymore
+    (is (= (query-to-vec ["SELECT certname FROM catalogs"])
+           [{:certname "myhost2.mydomain.com"}]))
+
+    ;; All the other resources should still be there
+    (is (= (query-to-vec ["SELECT COUNT(*) as c FROM catalog_resources"])
+           [{:c 3}]))))
+
+(deftest catalog-delete-without-gc
+  (testing "when deleted without GC, should leave params"
+    (add-certname! certname)
+    (let [hash1 (add-catalog! catalog)]
+      (delete-catalog! hash1))
+
+    ;; All the params should still be there
+    (is (= (query-to-vec ["SELECT COUNT(*) as c FROM resource_params"])
+           [{:c 7}]))
+    (is (= (query-to-vec ["SELECT COUNT(*) as c FROM resource_params_cache"])
+           [{:c 3}]))))
+
+(deftest catalog-delete-with-gc
+  (testing "when deleted and GC'ed, should leave no dangling params or edges"
+    (add-certname! certname)
+    (let [hash1 (add-catalog! catalog)]
+      (delete-catalog! hash1))
+    (garbage-collect!)
+
+    (is (= (query-to-vec ["SELECT * FROM resource_params"])
+           []))
+    (is (= (query-to-vec ["SELECT * FROM resource_params_cache"])
+           []))))
 
 (deftest catalog-bad-input
   (testing "should noop"
     (testing "on bad input"
-      (is (thrown? AssertionError (add-catalog! {})))
+      (is (thrown? clojure.lang.ExceptionInfo (add-catalog! {})))
 
       ; Nothing should have been persisted for this catalog
       (is (= (query-to-vec ["SELECT count(*) as nrows from certnames"])
             [{:nrows 0}])))))
 
+(defn foobar->foobar2 [x]
+  (if (and (string? x) (= x "/etc/foobar"))
+    "/etc/foobar2"
+    x))
+
+(defn table-args
+  "Many of the java.jdbc functions accept a table name as the first arg, this
+   function grabs that argument"
+  [coll]
+  (map first coll))
+
+(defn remove-edge-changes
+  "Remove the edge related changes from the `coll` of function call arguments"
+  [coll]
+  (remove #(= :edges (first %)) coll))
+
+(defn sort= [& args]
+  (apply = (map sort args)))
+
+(deftest existing-catalog-update
+  (let [{:keys [certname] :as catalog} (:basic catalogs)
+        old-date (ago (days 2))
+        yesterday (ago (days 1))]
+
+    (testing "inserting new catalog with resources"
+
+      (add-certname! certname)
+      (is (empty? (query-to-vec "SELECT * from catalogs where certname=?" certname)))
+
+      (add-catalog! catalog nil old-date)
+
+      (let [results (query-to-vec "SELECT timestamp from catalogs where certname=?" certname)
+            {:keys [timestamp]} (first results)]
+
+        (is (= 1 (count results)))
+        (is (= (to-timestamp old-date) (to-timestamp timestamp)))))
+    
+    (testing "changing a resource title"
+      (let [{orig-id :id
+             orig-tx-id :transaction_uuid
+             orig-timestamp :timestamp} (first (query-to-vec "SELECT id from catalogs where certname=?" certname))
+             updated-catalog (walk/prewalk foobar->foobar2 (:basic catalogs))
+             new-uuid (kitchensink/uuid)
+             metrics-map metrics]
+
+        (is (= #{{:type "Class" :title "foobar"}
+                 {:type "File" :title "/etc/foobar"}
+                 {:type "File" :title "/etc/foobar/baz"}}
+               (set (query-to-vec "SELECT cr.type, cr.title 
+                                   FROM catalogs c INNER JOIN catalog_resources cr ON c.id = cr.catalog_id
+                                   WHERE c.certname=?" certname))))
+
+        (tu/with-wrapped-fn-args [inserts sql/insert-records
+                                  deletes sql/delete-rows
+                                  updates sql/update-values]
+          (with-redefs [metrics (assoc metrics-map :catalog-volatility (histogram [ns-str "default" (str (gensym))]))]
+            (add-catalog! (assoc updated-catalog :transaction-uuid new-uuid) nil yesterday)
+
+            ;; 2 edge deletes
+            ;; 2 edge inserts
+            ;; 1 params insert
+            ;; 1 params cache insert
+            ;; 1 catalog_resource insert
+            ;; 1 catalog_resource delete
+            (is (= 8.0 (apply + (sample (:catalog-volatility metrics))))))
+
+          (is (sort= [:resource_params_cache :resource_params :catalog_resources]
+                     (table-args @inserts)))
+          (is (= [:catalogs]
+                 (table-args @updates)))
+          (is (= [[:catalog_resources ["catalog_id = ? and type = ? and title = ?" 1 "File" "/etc/foobar"]]]
+                 (remove-edge-changes @deletes))))
+
+        (is (= #{{:type "Class" :title "foobar"}
+                 {:type "File" :title "/etc/foobar2"}
+                 {:type "File" :title "/etc/foobar/baz"}}
+               (set (query-to-vec "SELECT cr.type, cr.title 
+                                   FROM catalogs c INNER JOIN catalog_resources cr ON c.id = cr.catalog_id
+                                   WHERE c.certname=?" certname))))
+
+        (let [results (query-to-vec "SELECT id, timestamp, transaction_uuid from catalogs where certname=?" certname)
+              {new-timestamp :timestamp
+               new-tx-id :transaction_uuid
+               new-id :id} (first results)]
+
+          (is (= 1 (count results)))
+          (is (= (to-timestamp yesterday) (to-timestamp new-timestamp)))
+          (is (= new-tx-id new-uuid))
+          (is (= orig-id new-id))
+          (is (not= orig-tx-id new-tx-id))
+          (is (not= orig-timestamp new-timestamp)))))))
+
+(deftest add-resource-to-existing-catalog
+  (let [{:keys [certname] :as catalog} (:basic catalogs)
+        old-date (ago (days 2))
+        yesterday (ago (days 1))]
+    (add-certname! certname)
+    (add-catalog! catalog nil old-date)
+
+    (is (= 3 (:c (first (query-to-vec "SELECT count(*) AS c FROM catalog_resources WHERE catalog_id = (select id from catalogs where certname = ?)" certname)))))
+
+    (tu/with-wrapped-fn-args [inserts sql/insert-records
+                           updates sql/update-values
+                           deletes sql/delete-rows]
+      (add-catalog! (assoc-in catalog
+                              [:resources {:type "File" :title "/etc/foobar2"}]
+                              {:type "File"
+                               :title "/etc/foobar2"
+                               :exported   false
+                               :file       "/tmp/foo2"
+                               :line       20
+                               :tags       #{"file" "class" "foobar"}
+                               :parameters {:ensure "directory"
+                                            :group  "root"
+                                            :user   "root"}})
+                    nil old-date)
+
+      (is (sort= [:resource_params_cache :resource_params :catalog_resources]
+                 (table-args @inserts)))
+      (is (= [:catalogs]
+             (table-args @updates)))
+      (is (empty? @deletes)))
+
+    (is (= 4 (:c (first (query-to-vec "SELECT count(*) AS c FROM catalog_resources WHERE catalog_id = (select id from catalogs where certname = ?)" certname)))))))
+
+(deftest change-line-resource-metadata
+  (add-certname! certname)
+  (add-catalog! catalog)
+
+  (testing "changing line number"
+    (is (= #{{:line nil}
+             {:line 10}
+             {:line 20}}
+           (set (query-to-vec "SELECT line FROM catalog_resources WHERE catalog_id = (select id from catalogs where certname = ?)" certname))))
+
+    (add-catalog! (update-in catalog [:resources]
+                             (fn [resources]
+                               (kitchensink/mapvals #(assoc % :line 1000) resources))))
+    
+    (is (= [{:line 1000}
+            {:line 1000}
+            {:line 1000}]
+           (query-to-vec "SELECT line FROM catalog_resources WHERE catalog_id = (select id from catalogs where certname = ?)" certname)))))
+
+(deftest change-exported-resource-metadata
+  (add-certname! certname)
+  (add-catalog! catalog)
+  
+  (testing "changing exported"
+    (is (= #{{:exported false
+              :title "foobar"}
+             {:exported false
+              :title "/etc/foobar"}
+             {:exported false
+              :title "/etc/foobar/baz"}}
+           (set (query-to-vec "SELECT title, exported FROM catalog_resources WHERE catalog_id = (select id from catalogs where certname = ?)" certname))))
+
+    (add-catalog! (update-in catalog [:resources]
+                             (fn [resources]
+                               (-> resources
+                                   (assoc-in [{:type "Class" :title "foobar"} :exported] true)
+                                   (assoc-in [{:type "File" :title "/etc/foobar/baz"} :exported] true)))))
+    (is (= #{{:exported true
+              :title "foobar"}
+             {:exported false
+              :title "/etc/foobar"}
+             {:exported true
+              :title "/etc/foobar/baz"}}
+           (set (query-to-vec "SELECT title, exported FROM catalog_resources WHERE catalog_id = (select id from catalogs where certname = ?)" certname))))))
+
+(deftest change-file-resource-metadata
+  (add-certname! certname)
+  (add-catalog! catalog)
+
+  (testing "changing line number"
+    (is (= #{{:title "foobar"
+              :file nil}
+             {:title "/etc/foobar"
+              :file "/tmp/foo"}
+             {:title "/etc/foobar/baz"
+              :file "/tmp/bar"}}
+           (set (query-to-vec "SELECT title, file FROM catalog_resources WHERE catalog_id = (select id from catalogs where certname = ?)" certname))))
+
+    (add-catalog! (update-in catalog [:resources]
+                             (fn [resources]
+                               (kitchensink/mapvals #(assoc % :file "/tmp/foo.pp") resources))))
+
+    (is (= #{{:title "foobar"
+              :file "/tmp/foo.pp"}
+             {:title "/etc/foobar"
+              :file "/tmp/foo.pp"}
+             {:title "/etc/foobar/baz"
+              :file "/tmp/foo.pp"}}
+           (set (query-to-vec "SELECT title, file FROM catalog_resources WHERE catalog_id = (select id from catalogs where certname = ?)" certname))))))
+
+(defn tags->set
+  "Converts tags from a vector to a set"
+  [result-set]
+  (mapv (fn [result]
+          (update-in result [:tags] set))
+        result-set))
+
+(deftest change-tags-on-resource
+  (add-certname! certname)
+  (add-catalog! catalog)
+
+  (is (= #{{:title "foobar"
+            :tags #{}
+            :line nil}
+           {:title "/etc/foobar"
+            :tags #{"file" "class" "foobar"}
+            :line 10}
+           {:title "/etc/foobar/baz"
+            :tags #{"file" "class" "foobar"}
+            :line 20}}
+         (-> (query-to-vec "SELECT title, tags, line FROM catalog_resources WHERE catalog_id = (select id from catalogs where certname = ?)" certname)
+             convert-result-arrays
+             tags->set
+             set)))
+
+  (add-catalog! (update-in catalog [:resources]
+                           (fn [resources]
+                             (-> resources
+                                 (assoc-in [{:type "File" :title "/etc/foobar"} :tags] #{"totally" "different" "tags"})
+                                 (assoc-in [{:type "File" :title "/etc/foobar"} :line] 500)))))
+  (is (= #{{:title "foobar"
+            :tags #{}
+            :line nil}
+           {:title "/etc/foobar"
+            :line 500
+            :tags #{"totally" "different" "tags"}}
+           {:title "/etc/foobar/baz"
+            :line 20
+            :tags #{"file" "class" "foobar"}}}
+         (-> (query-to-vec "SELECT title, tags, line FROM catalog_resources WHERE catalog_id = (select id from catalogs where certname = ?)" certname)
+             convert-result-arrays
+             tags->set
+             set))))
+
+(deftest removing-resources
+  (let [{:keys [certname] :as catalog} (:basic catalogs)
+        old-date (ago (days 2))
+        yesterday (ago (days 1))
+        catalog-with-extra-resource (assoc-in catalog
+                                              [:resources {:type "File" :title "/etc/the-foo"}]
+                                              {:type       "File"
+                                               :title      "/etc/the-foo"
+                                               :exported   false
+                                               :file       "/tmp/the-foo"
+                                               :line       10
+                                               :tags       #{"file" "class" "the-foo"}
+                                               :parameters {:ensure "directory"
+                                                            :group  "root"
+                                                            :user   "root"}})]
+    (add-certname! certname)    
+    (add-catalog! catalog-with-extra-resource nil old-date)
+
+    (let [catalog-id (:id (first (query-to-vec "SELECT id from catalogs where certname=?" certname)))]
+      (is (= 4 (count (query-to-vec "SELECT * from catalog_resources where catalog_id = ?" catalog-id))))
+
+      (tu/with-wrapped-fn-args [inserts sql/insert-records
+                                updates sql/update-values
+                                deletes sql/delete-rows]
+        
+        (add-catalog! catalog nil yesterday)
+        (is (empty? @inserts))
+        (is (= [:catalogs]
+               (table-args @updates)))
+        (is (= [:catalog_resources]
+               (table-args @deletes))))
+
+      (let [catalog-results (query-to-vec "SELECT timestamp from catalogs where certname=?" certname)
+            {:keys [timestamp]} (first catalog-results)
+            resources (set (query-to-vec "SELECT type, title from catalog_resources where catalog_id = ?" catalog-id))]
+        
+        (is (= 1 (count catalog-results)))
+        (is (= 3 (count resources)))
+        (is (= (set (keys (:resources catalog)))
+               resources))
+        (is (= (to-timestamp yesterday) (to-timestamp timestamp)))))))
+
+(defn foobar-params []
+  (sql/with-query-results result-set
+    ["SELECT p.name AS k, p.value AS v
+      FROM catalog_resources cr, catalogs c, resource_params p
+      WHERE cr.catalog_id = c.id AND cr.resource = p.resource AND certname=? AND cr.type=? AND cr.title=?"
+     (get-in catalogs [:basic :certname]) "File" "/etc/foobar"]
+    (reduce (fn [acc row]
+              (assoc acc (keyword (:k row))
+                     (json/parse-string (:v row))))
+            {} result-set)))
+
+(defn foobar-params-cache []
+  (sql/with-query-results result-set
+    ["SELECT rpc.parameters as params
+      FROM catalog_resources cr, catalogs c, resource_params_cache rpc
+      WHERE cr.catalog_id = c.id AND cr.resource = rpc.resource AND certname=? AND cr.type=? AND cr.title=?"
+     (get-in catalogs [:basic :certname]) "File" "/etc/foobar"]
+    (-> result-set
+        first
+        :params
+        (json/parse-string true))))
+
+(defn foobar-param-hash []
+  (sql/with-query-results result-set
+    ["SELECT cr.resource hash
+      FROM catalog_resources cr, catalogs c
+      WHERE cr.catalog_id = c.id AND certname=? AND cr.type=? AND cr.title=?"
+     (get-in catalogs [:basic :certname]) "File" "/etc/foobar"]
+    (-> result-set
+        first
+        :hash)))
+
+(deftest catalog-resource-parameter-changes
+  (let [{:keys [certname] :as catalog} (:basic catalogs)
+        old-date (ago (days 2))
+        yesterday (ago (days 1))]
+    (add-certname! certname)    
+    (add-catalog! catalog nil old-date)
+
+    (let [orig-resource-hash (foobar-param-hash)
+          add-param-catalog (assoc-in catalog [:resources {:type "File" :title "/etc/foobar"} :parameters :uid] "100")]
+      (is (= (get-in catalog [:resources {:type "File" :title "/etc/foobar"} :parameters])
+             (foobar-params)))
+      
+      (is (= (get-in catalog [:resources {:type "File" :title "/etc/foobar"} :parameters])
+             (foobar-params-cache)))
+
+      (tu/with-wrapped-fn-args [inserts sql/insert-records
+                                updates sql/update-values
+                                deletes sql/delete-rows]
+        
+        (add-catalog! add-param-catalog nil yesterday)
+        (is (sort= [:catalogs :catalog_resources]
+                   (table-args @updates)))
+        
+        (is (empty? (remove-edge-changes @deletes)))
+
+        (is (sort= [:resource_params_cache :resource_params]
+                   (table-args @inserts))))
+
+      (is (not= orig-resource-hash (foobar-param-hash)))
+      
+      (is (= (get-in add-param-catalog [:resources {:type "File" :title "/etc/foobar"} :parameters])
+             (foobar-params)))
+      
+      (is (= (get-in add-param-catalog [:resources {:type "File" :title "/etc/foobar"} :parameters])
+             (foobar-params-cache)))
+      (tu/with-wrapped-fn-args [inserts sql/insert-records
+                                updates sql/update-values
+                                deletes sql/delete-rows]
+        (add-catalog! catalog nil old-date)
+
+        (is (empty? @inserts))
+        (is (empty? (remove #(= :edges (first %)) @deletes)))
+        (is (= (sort [:catalog_resources :catalogs])
+               (sort (map first @updates)))))
+
+      (is (= orig-resource-hash (foobar-param-hash)))
+
+      (is (= (get-in catalog [:resources {:type "File" :title "/etc/foobar"} :parameters])
+             (foobar-params)))
+      
+      (is (= (get-in catalog [:resources {:type "File" :title "/etc/foobar"} :parameters])
+             (foobar-params-cache))))))
+
 (deftest catalog-referential-integrity-violation
   (testing "on input that violates referential integrity"
     ; This catalog has an edge that points to a non-existant resource
     (let [catalog (:invalid catalogs)]
-      (is (thrown? AssertionError (add-catalog! {})))
+      (is (thrown? clojure.lang.ExceptionInfo (add-catalog! {})))
 
       ; Nothing should have been persisted for this catalog
       (is (= (query-to-vec ["SELECT count(*) as nrows from certnames"])
@@ -482,25 +840,8 @@
 
 (let [timestamp     (now)
       report        (:basic reports)
-      report-hash   (report-identity-string report)
+      report-hash   (shash/report-identity-hash report)
       certname      (:certname report)]
-
-  (deftest report-dedupe
-    (testing "Reports with the same metadata but different events should have different hashes"
-      (is (= report-hash (report-identity-string report)))
-      (is (not= report-hash (report-identity-string (reputils/add-random-event-to-report report))))
-      (is (not= report-hash (report-identity-string (reputils/mod-event-in-report report))))
-      (is (not= report-hash (report-identity-string (reputils/remove-random-event-from-report report)))))
-
-    (testing "Reports with different metadata but the same events should have different hashes"
-      (let [mod-report-fns [#(assoc % :certname (str (:certname %) "foo"))
-                            #(assoc % :puppet-version (str (:puppet-version %) "foo"))
-                            #(assoc % :report-format (inc (:report-format %)))
-                            #(assoc % :configuration-version (str (:configuration-version %) "foo"))
-                            #(assoc % :start-time (str (:start-time %) "foo"))
-                            #(assoc % :end-time (str (:start-time %) "foo"))]]
-        (doseq [mod-report-fn mod-report-fns]
-          (is (not= report-hash (report-identity-string (mod-report-fn report))))))))
 
   (deftest report-storage
     (testing "should store reports"
@@ -565,3 +906,116 @@
     (let [[deprecated? message] (db-deprecated? "PostgreSQL" [9 4])]
       (is (not deprecated?))
       (is (nil? message)))))
+
+(deftest test-catalog-schemas
+  (is (= (:basic catalogs) (s/validate catalog-schema (:basic catalogs)))))
+
+(deftest test-resource-metadata-diff
+  (are [expected left right] (= expected (basic-diff left right))
+       {}
+       {:type "foo" :title "bar"}
+       {:type "foo" :title "bar"}
+
+       {:line       20}
+       {:type       "File"
+        :title      "/etc/foobar/baz"
+        :exported   false
+        :file       "/tmp/bar"
+        :line       10
+        :tags       #{"file" "class" "foobar"}}
+       {:type       "File"
+        :title      "/etc/foobar/baz"
+        :exported   false
+        :file       "/tmp/bar"
+        :line       20
+        :tags       #{"file" "class" "foobar"}}
+
+       {:exported   true
+        :file       "/tmp/bar/baz"
+        :line       30
+        :tags       #{"file" "class" "foobar" "baz"}}
+       {:type       "File"
+        :title      "/etc/foobar/baz"
+        :exported   false
+        :file       "/tmp/bar"
+        :line       20
+        :tags       #{"file" "class" "foobar"}}
+       {:type       "File"
+        :title      "/etc/foobar/baz"
+        :exported   true
+        :file       "/tmp/bar/baz"
+        :line       30
+        :tags       #{"file" "class" "foobar" "baz"}}))
+
+(deftest test-diff-resources-metadata
+  (let [resources-1 {{:type "File" :title "/etc/foobar"}
+                     {:type       "File"
+                      :title      "/etc/foobar"
+                      :exported   false
+                      :file       "/tmp/foo"
+                      :line       10
+                      :tags       #{"file" "class" "foobar"}}
+
+                     {:type "File" :title "/etc/foobar/baz"}
+                     {:type       "File"
+                      :title      "/etc/foobar/baz"
+                      :exported   false
+                      :file       "/tmp/bar"
+                      :line       20
+                      :tags       #{"file" "class" "foobar"}}}
+        resources-2 {{:type "File" :title "/etc/foobar"}
+                     {:type       "File"
+                      :title      "/etc/foobar"
+                      :exported   false
+                      :file       "/tmp/foo"
+                      :line       20
+                      :tags       #{"file" "class" "foobar"}}
+
+                     {:type "File" :title "/etc/foobar/baz"}
+                     {:type       "File"
+                      :title      "/etc/foobar/baz"
+                      :exported   true
+                      :file       "/tmp/bar/baz"
+                      :line       30
+                      :tags       #{"file" "class" "foobar" "baz"}}}]
+
+    (are [expected left right] (= expected (diff-resources-metadata left right))
+
+         {}
+         resources-1
+         resources-1
+
+         {{:type "File" :title "/etc/foobar"}
+          {:line 30}}
+         resources-1
+         (assoc-in resources-1 [{:type "File" :title "/etc/foobar"} :line] 30)
+
+         {{:type "File" :title "/etc/foobar"}
+          {:line 20}
+
+          {:type "File" :title "/etc/foobar/baz"}
+          {:exported   true
+           :file       "/tmp/bar/baz"
+           :line       30
+           :tags       #{"file" "class" "foobar" "baz"}}}
+         resources-1
+         resources-2)))
+
+(deftest test-merge-resource-hash
+  (let [ref->resource {{:type "File" :title "/tmp/foo"}
+                       {:line 10}
+          
+                       {:type "File" :title "/tmp/bar"}
+                       {:line 20}}
+        ref->hash {{:type "File" :title "/tmp/foo"}
+                   "foo hash"
+          
+                   {:type "File" :title "/tmp/bar"}
+                   "bar hash"}]
+    (is (= {{:type "File" :title "/tmp/foo"}
+            {:line 10 :resource "foo hash"}
+          
+            {:type "File" :title "/tmp/bar"}
+            {:line 20 :resource "bar hash"}}
+
+           (merge-resource-hash ref->hash ref->resource)))))

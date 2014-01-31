@@ -7,10 +7,11 @@
             [clojure.string :as string]
             [clojure.java.jdbc :as sql]
             [cheshire.core :as json]
-            [fs.core :as fs])
-  (:use     [com.puppetlabs.puppetdb.scf.storage :only [sql-current-connection-table-names]]
+            [fs.core :as fs]
+            [slingshot.slingshot :refer [throw+]])
+  (:use     [com.puppetlabs.puppetdb.scf.storage-utils :only [sql-current-connection-table-names]]
             [com.puppetlabs.testutils.logging :only [with-log-output]]
-            [com.puppetlabs.utils :only [parse-int excludes? keyset]]
+            [puppetlabs.kitchensink.core :only [parse-int excludes? keyset]]
             [clojure.test]
             [clojure.set :only [difference]]
             [ring.mock.request]))
@@ -27,7 +28,7 @@
   (throw (IllegalStateException.
            (str "No test database configuration found!  Please make sure that "
               "your test config file defines a no-arg function named "
-             "'test-db-config'."))))
+              "'test-db-config'."))))
 
 (defn load-test-config
   "Loads the test configuration file from the classpath.  First looks for
@@ -229,28 +230,98 @@
           headers (:headers request)]
       (assoc request :headers (assoc headers "Accept" c-t)))))
 
+
+(defn paged-results*
+  "Makes a ring request to `path` using the `app-fn` ring handler. Sets the necessary parameters
+   for paged results.  Returns the ring response, with the body converted from the stream/JSON
+   to clojure data structures."
+  [{:keys [app-fn path query params limit total include-total offset] :as paged-test-params}]
+  {:pre [(= #{} (difference
+                 (keyset paged-test-params)
+                 #{:app-fn :path :query :params :limit :total :include-total :offset}))]}
+  (let [params  (merge params
+                       {:limit limit
+                        :offset offset})
+        request (get-request path query
+                             (if include-total
+                               (assoc params :include-total true)
+                               params))
+        resp (app-fn request)
+        body    (if (string? (:body resp))
+                  (:body resp)
+                  (slurp (:body resp)))]
+    (assoc resp :body (json/parse-string body true))))
+
 (defn paged-results
+  "This function makes multiple calls to the ring handler `app-fn` to consume all of the
+   results for `query`, a `limit` number of records at a time using the built in paging
+   functions. See paged-results* for the code making the GET requests, this function
+   drives the pages and the assertions of the result."
   [{:keys [app-fn path query params limit total include-total] :as paged-test-params}]
   {:pre [(= #{} (difference
-                  (keyset paged-test-params)
-                  #{:app-fn :path :query :params :limit :total :include-total}))]}
+                 (keyset paged-test-params)
+                 #{:app-fn :path :query :params :limit :total :include-total}))]}
   (reduce
     (fn [coll n]
-      (let [params  (merge params
-                      {:limit limit :offset (* limit n)})
-            request (get-request path query
-                      (if include-total
-                        (assoc params :include-total true)
-                        params))
-            {:keys [status body headers] :as resp} (app-fn request)
-            _       (assert-success! resp)
-            result  (json/parse-string body true)]
-        (is (>= limit (count result)))
+      (let [{:keys [status body headers] :as resp} (paged-results* (assoc paged-test-params :offset (* limit n)))]
+        (assert-success! resp)
+        (is (>= limit (count body)))
         (if include-total
           (do
             (is (contains? headers paging/count-header))
             (is (= total (parse-int (headers paging/count-header)))))
           (is (excludes? headers paging/count-header)))
-        (concat coll result)))
+        (concat coll body)))
     []
     (range (java.lang.Math/ceil (/ total (float limit))))))
+
+(defn delete-on-exit
+  "Will delete file `f` on shutdown of the JVM"
+  [^java.io.File f]
+  (doto f
+    .deleteOnExit))
+
+(def ^{:doc "Creates a temp file, deletes it on JVM shutdown"}
+  temp-file (comp delete-on-exit fs/temp-file))
+
+(def ^{:doc "Creates a temp directory, deletes the directory on JVM shutdown"}
+  temp-dir (comp delete-on-exit fs/temp-dir))
+
+(defmacro with-err-str
+  "Similar to with-out-str, but captures standard error rather than standard out"
+  [& body]
+  `(let [sw# (new java.io.StringWriter)]
+     (binding [*err* sw#]
+       ~@body
+       (str sw#))))
+
+(defn wrap-capture-args
+  "Takes a function and wraps it, capturing each call's arguments by
+   conjing them onto args"
+  [orig-fn arg-atom]
+  (fn [& args]
+    (swap! arg-atom conj args)
+    (apply orig-fn args)))
+
+(defmacro with-wrapped-fn-args
+  "with-wrapped-fn-args is a with-open style macro, where `bindings` is a vector where the
+   odd elements are symbols and the even elements are functions.  The functions will be wrapped
+   (see `wrap-capture-args`) and each of call's arguments will be stored in an atom bound to
+   to the given symbol.
+
+   (with-wrapped-fn-args [+-call-args +]
+     (mapv + [1 2 3] [4 5 6])
+     (println @+-call-args)
+     (= '[(1 4) (2 5) (3 6)] @+-call-args))"
+  [bindings & body]
+  (cond
+   (zero? (count bindings))
+    `(do ~@body)
+
+    (symbol? (first bindings))
+   `(let [~(get bindings 0) (atom [])
+          orig-fn# ~(get bindings 1)]
+      (with-redefs [~(get bindings 1) (wrap-capture-args orig-fn# ~(get bindings 0))]
+        (with-wrapped-fn-args ~(subvec bindings 2)
+          ~@body)))
+   :else (throw+ "with-wrapped-fn-args bindings should be pairs of count-atom-sym and fn-to-wrap with the call-count function")))
