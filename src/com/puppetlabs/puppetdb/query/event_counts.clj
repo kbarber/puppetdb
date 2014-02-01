@@ -4,7 +4,7 @@
   (:use [com.puppetlabs.jdbc :only [valid-jdbc-query? dashes->underscores underscores->dashes]]
         [com.puppetlabs.puppetdb.query :only [compile-term execute-query]]
         [com.puppetlabs.puppetdb.query.paging :only [validate-order-by!]]
-        [com.puppetlabs.utils :only [contains-some]]
+        [puppetlabs.kitchensink.core :only [contains-some]]
         [clojure.core.match :only [match]]))
 
 (defn- compile-event-count-equality
@@ -17,7 +17,7 @@
     (throw (IllegalArgumentException. (format "= requires exactly two arguments, but %d were supplied" (count args)))))
   (let [db-field (dashes->underscores path)]
     (match [db-field]
-      [(field :when #{"successes" "failures" "noops" "skips"})]
+      [(field :guard #{"successes" "failures" "noops" "skips"})]
       {:where (format "%s = ?" field)
        :params [value]}
 
@@ -32,7 +32,7 @@
   (when-not (= (count args) 3)
     (throw (IllegalArgumentException. (format "%s requires exactly two arguments, but %d were supplied" op (dec (count args))))))
   (match [path]
-    [(field :when #{"successes" "failures" "noops" "skips"})]
+    [(field :guard #{"successes" "failures" "noops" "skips"})]
     {:where (format "%s %s ?" field op)
      :params [value]}
 

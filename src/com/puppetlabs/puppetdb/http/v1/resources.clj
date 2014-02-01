@@ -68,7 +68,7 @@
 (ns com.puppetlabs.puppetdb.http.v1.resources
   (:require [com.puppetlabs.http :as pl-http]
             [com.puppetlabs.puppetdb.query.resources :as r]
-            [cheshire.core :as json]
+            [com.puppetlabs.cheshire :as json]
             [ring.util.response :as rr])
   (:use [net.cgrand.moustache :only [app]]
         com.puppetlabs.middleware
@@ -113,7 +113,10 @@
   (app
     [""]
     {:get (fn [{:keys [params globals]}]
-            (produce-body (:resource-query-limit globals) (params "query") (:scf-db globals)))}))
+            (produce-body
+              (:resource-query-limit globals)
+              (params "query")
+              (:scf-read-db globals)))}))
 
 (def resources-app
   "Ring app for querying resources"

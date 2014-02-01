@@ -2,7 +2,8 @@
   (:require [com.puppetlabs.puppetdb.query.population :as pop]
             [clojure.java.jdbc :as sql])
   (:use clojure.test
-        [com.puppetlabs.puppetdb.scf.storage :only [deactivate-node! to-jdbc-varchar-array]]
+        [com.puppetlabs.puppetdb.scf.storage :only [deactivate-node!]]
+        [com.puppetlabs.puppetdb.scf.storage-utils :only [to-jdbc-varchar-array]]
         [com.puppetlabs.puppetdb.fixtures]))
 
 (use-fixtures :each with-test-db)
@@ -15,25 +16,29 @@
     (testing "should only count current resources"
       (sql/insert-records
        :certnames
-       {:name "h1"})
+       {:name "h1"}
+       {:name "h2"})
+
+      (deactivate-node! "h2")
 
       (sql/insert-records
        :catalogs
-       {:hash "c1" :api_version 1 :catalog_version "1"}
-       {:hash "c2" :api_version 1 :catalog_version "1"})
+       {:id 1 :hash "c1" :api_version 1 :catalog_version "1" :certname "h1"}
+       {:id 2 :hash "c2" :api_version 1 :catalog_version "1" :certname "h2"})
 
-      ;; The catalog "c2" isn't associated with a node
       (sql/insert-records
-       :certname_catalogs
-       {:certname "h1" :catalog "c1"})
+       :resource_params_cache
+       {:resource "1" :parameters nil}
+       {:resource "2" :parameters nil}
+       {:resource "3" :parameters nil})
 
       (sql/insert-records
        :catalog_resources
-       {:catalog "c1" :resource "1" :type "Foo" :title "Bar" :exported true :tags (to-jdbc-varchar-array [])}
+       {:catalog_id 1 :resource "1" :type "Foo" :title "Bar" :exported true :tags (to-jdbc-varchar-array [])}
        ;; c2's resource shouldn't be counted, as they don't correspond to an active node
-       {:catalog "c2" :resource "1" :type "Foo" :title "Baz" :exported true :tags (to-jdbc-varchar-array [])}
-       {:catalog "c1" :resource "2" :type "Foo" :title "Boo" :exported true :tags (to-jdbc-varchar-array [])}
-       {:catalog "c1" :resource "3" :type "Foo" :title "Goo" :exported true :tags (to-jdbc-varchar-array [])})
+       {:catalog_id 2 :resource "1" :type "Foo" :title "Baz" :exported true :tags (to-jdbc-varchar-array [])}
+       {:catalog_id 1 :resource "2" :type "Foo" :title "Boo" :exported true :tags (to-jdbc-varchar-array [])}
+       {:catalog_id 1 :resource "3" :type "Foo" :title "Goo" :exported true :tags (to-jdbc-varchar-array [])})
 
       (is (= 3 (pop/num-resources))))
 
@@ -71,20 +76,21 @@
 
       (sql/insert-records
        :catalogs
-       {:hash "c1" :api_version 1 :catalog_version "1"}
-       {:hash "c2" :api_version 1 :catalog_version "1"})
+       {:id 1 :hash "c1" :api_version 1 :catalog_version "1" :certname "h1"}
+       {:id 2 :hash "c2" :api_version 1 :catalog_version "1" :certname "h2"})
 
       (sql/insert-records
-       :certname_catalogs
-       {:certname "h1" :catalog "c1"}
-       {:certname "h2" :catalog "c2"})
+       :resource_params_cache
+       {:resource "1" :parameters nil}
+       {:resource "2" :parameters nil}
+       {:resource "3" :parameters nil})
 
       (sql/insert-records
        :catalog_resources
-       {:catalog "c1" :resource "1" :type "Foo" :title "Bar" :exported true :tags (to-jdbc-varchar-array [])}
-       {:catalog "c2" :resource "1" :type "Foo" :title "Baz" :exported true :tags (to-jdbc-varchar-array [])}
-       {:catalog "c1" :resource "2" :type "Foo" :title "Boo" :exported true :tags (to-jdbc-varchar-array [])}
-       {:catalog "c1" :resource "3" :type "Foo" :title "Goo" :exported true :tags (to-jdbc-varchar-array [])})
+       {:catalog_id 1 :resource "1" :type "Foo" :title "Bar" :exported true :tags (to-jdbc-varchar-array [])}
+       {:catalog_id 2 :resource "1" :type "Foo" :title "Baz" :exported true :tags (to-jdbc-varchar-array [])}
+       {:catalog_id 1 :resource "2" :type "Foo" :title "Boo" :exported true :tags (to-jdbc-varchar-array [])}
+       {:catalog_id 1 :resource "3" :type "Foo" :title "Goo" :exported true :tags (to-jdbc-varchar-array [])})
 
       (let [total  4
             unique 3

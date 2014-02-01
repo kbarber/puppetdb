@@ -39,11 +39,14 @@ end
 @pe = TRUE
 ENV['PATH'] = "/opt/puppet/bin:" + ENV['PATH']
 
+@osfamily = (Facter.value(:osfamily) || "").downcase
+
 if @pe
     @install_dir = "/opt/puppet/share/puppetdb"
     @etc_dir = "/etc/puppetlabs/puppetdb"
     @config_dir = "/etc/puppetlabs/puppetdb/conf.d"
     @lib_dir = "/opt/puppet/share/puppetdb"
+    @libexec_dir = "/opt/puppet/libexec/puppetdb"
     @name ="pe-puppetdb"
     @sbin_dir = "/opt/puppet/sbin"
     @pe_version = ENV['PE_VER'] || '3.0'
@@ -53,6 +56,12 @@ else
     @etc_dir = "/etc/puppetdb"
     @config_dir = "/etc/puppetdb/conf.d"
     @lib_dir = "/var/lib/puppetdb"
+    @libexec_dir = case @osfamily
+      when /redhat/, /suse/, /darwin/, /bsd/
+        "/usr/libexec/puppetdb"
+      else
+        "/usr/lib/puppetdb"
+      end
     @link = "/usr/share/puppetdb"
     @name = "puppetdb"
     @sbin_dir = "/usr/sbin"
@@ -71,7 +80,6 @@ PATH = ENV['PATH']
 DESTDIR=  ENV['DESTDIR'] || ''
 PE_SITELIBDIR = "/opt/puppet/lib/ruby/site_ruby/1.9.1"
 
-@osfamily = (Facter.value(:osfamily) || "").downcase
 
 case @osfamily
   when /debian/
@@ -112,17 +120,6 @@ file "ext/files/config.ini" => [ :template, JAR_FILE ]   do
 end
 
 namespace :test do
-  desc "Build packages for testing"
-  task :package do
-    # TODO: I'm not proud of this.  The contents of the shell script(s) that
-    # we call here need to be reconciled with Moses' standardized packaging
-    # stuff, and a lot of the contents should probably be ported over to
-    # Ruby instead of just shipping the nasty scripts.  However, this first step
-    # at least gives us 1) VCS for this stuff, and 2) the ability to run
-    # the two packaging builds in parallel.
-    sh "sh ./ext/test/build_packages.sh"
-  end
-
   desc "Run beaker based acceptance tests"
   task :beaker, :test_files do |t, args|
     args.with_defaults(:test_files => 'acceptance/tests/')

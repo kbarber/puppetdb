@@ -18,6 +18,7 @@ task :install => [  JAR_FILE  ] do
   mkdir_p "#{DESTDIR}/#{@log_dir}"
   mkdir_p "#{DESTDIR}/etc/init.d/"
   mkdir_p "#{DESTDIR}/#{@lib_dir}"
+  mkdir_p "#{DESTDIR}/#{@libexec_dir}"
   mkdir_p "#{DESTDIR}/#{@sbin_dir}"
   mkdir_p "#{DESTDIR}/etc/logrotate.d/"
   ln_sf @config_dir, "#{DESTDIR}/#{@lib_dir}/config"
@@ -45,19 +46,38 @@ task :install => [  JAR_FILE  ] do
   cp_pr "ext/files/repl.ini", "#{DESTDIR}/#{@config_dir}"
   cp_pr "ext/files/puppetdb.logrotate", "#{DESTDIR}/etc/logrotate.d/#{@name}"
   cp_pr "ext/files/log4j.properties", "#{DESTDIR}/#{@config_dir}/.."
-  cp_pr "ext/files/puppetdb-ssl-setup", "#{DESTDIR}/#{@sbin_dir}"
-  cp_pr "ext/files/puppetdb-foreground", "#{DESTDIR}/#{@sbin_dir}"
-  cp_pr "ext/files/puppetdb-import", "#{DESTDIR}/#{@sbin_dir}"
-  cp_pr "ext/files/puppetdb-export", "#{DESTDIR}/#{@sbin_dir}"
-  cp_pr "ext/files/puppetdb-anonymize", "#{DESTDIR}/#{@sbin_dir}"
+  cp_pr "ext/files/puppetdb", "#{DESTDIR}/#{@sbin_dir}"
+
+  # Copy legacy wrapper for deprecated hyphenated sub-commands
+  legacy_cmds=%w|puppetdb-ssl-setup puppetdb-foreground puppetdb-import puppetdb-export puppetdb-anonymize|
+  legacy_cmds.each do |file|
+    cp_pr "ext/files/puppetdb-legacy", "#{DESTDIR}/#{@sbin_dir}/#{file}"
+  end
+
+  # Copy internal sub-commands to libexec location
+  internal_cmds=legacy_cmds
+  internal_cmds.each do |file|
+    cp_pr "ext/files/#{file}", "#{DESTDIR}/#{@libexec_dir}"
+  end
 
   # figure out which init script to install based on facter
   if @osfamily == "redhat"
-    mkdir_p "#{DESTDIR}/etc/sysconfig"
-    mkdir_p "#{DESTDIR}/etc/rc.d/init.d/"
-    cp_p "ext/files/puppetdb.default", "#{DESTDIR}/etc/sysconfig/#{@name}"
-    cp_p "ext/files/puppetdb.redhat.init", "#{DESTDIR}/etc/rc.d/init.d/#{@name}"
-    chmod 0755, "#{DESTDIR}/etc/rc.d/init.d/#{@name}"
+    @operatingsystem = Facter.value(:operatingsystem).downcase
+    @operatingsystemrelease = `cat /etc/redhat-release | awk '{print $3}'`.chomp
+    puts "operatingsystem is #{@operatingsystem}"
+    puts "operatingsystemrelease is #{@operatingsystemrelease}"
+    if (@operatingsystem == "fedora" && @operatingsystemrelease.to_i >= 17) || (@operatingsystem =~ /redhat|centos/ && @operatingsystemrelease.to_f >= 7 )
+      #systemd!
+      mkdir_p "#{DESTDIR}/usr/lib/systemd/system"
+      cp_p "ext/files/systemd/#{@name}.service", "#{DESTDIR}/usr/lib/systemd/system"
+      chmod 0644, "#{DESTDIR}/usr/lib/systemd/system/#{@name}.service"
+    else
+      mkdir_p "#{DESTDIR}/etc/sysconfig"
+      mkdir_p "#{DESTDIR}/etc/rc.d/init.d/"
+      cp_p "ext/files/puppetdb.default", "#{DESTDIR}/etc/sysconfig/#{@name}"
+      cp_p "ext/files/puppetdb.redhat.init", "#{DESTDIR}/etc/rc.d/init.d/#{@name}"
+      chmod 0755, "#{DESTDIR}/etc/rc.d/init.d/#{@name}"
+    end
   elsif @osfamily == "suse"
     mkdir_p "#{DESTDIR}/etc/sysconfig"
     mkdir_p "#{DESTDIR}/etc/init.d/"
@@ -83,4 +103,5 @@ task :install => [  JAR_FILE  ] do
   chmod 0700, "#{DESTDIR}/#{@sbin_dir}/puppetdb-import"
   chmod 0700, "#{DESTDIR}/#{@sbin_dir}/puppetdb-export"
   chmod 0700, "#{DESTDIR}/#{@sbin_dir}/puppetdb-anonymize"
+  chmod 0700, "#{DESTDIR}/#{@sbin_dir}/puppetdb"
 end

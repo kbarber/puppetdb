@@ -1,5 +1,5 @@
 ---
-title: "PuppetDB 1.5 » Installing PuppetDB from Source"
+title: "PuppetDB 1.6 » Installing PuppetDB from Source"
 layout: default
 canonical: "/puppetdb/latest/install_from_source.html"
 ---
@@ -79,7 +79,7 @@ If your PuppetDB server has puppet agent installed, has received a valid certifi
 
 Run the following command: 
 
-    $ sudo /usr/sbin/puppetdb-ssl-setup
+    $ sudo /usr/sbin/puppetdb ssl-setup
 
 This will copy the relevant PEM files from your Puppet installation into `/etc/puppetdb/ssl` and can be used to correct your SSL configuration in `jetty.ini` to use those files.
 

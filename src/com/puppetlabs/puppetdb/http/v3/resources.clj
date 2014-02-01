@@ -3,44 +3,52 @@
             [com.puppetlabs.puppetdb.query.paging :as paging]
             [com.puppetlabs.http :as pl-http]
             [com.puppetlabs.puppetdb.query.resources :as r]
-            [cheshire.core :as json])
+            [ring.util.response :as rr]
+            [com.puppetlabs.cheshire :as json])
   (:use [net.cgrand.moustache :only [app]]
         [com.puppetlabs.middleware :only (verify-accepts-json validate-query-params wrap-with-paging-options)]
-        [com.puppetlabs.jdbc :only (with-transacted-connection)]
-        [com.puppetlabs.puppetdb.http :only (query-result-response)]))
+        [com.puppetlabs.jdbc :only (with-transacted-connection get-result-count)]
+        [com.puppetlabs.puppetdb.http :only (add-headers)]))
 
 (defn produce-body
-  "Given a `limit`, a query, and database connection, return a Ring
-  response with the query results.
+  "Given a query, and database connection, return a Ring response with the query results.
 
-  If the query can't be parsed, a 400 is returned.
-
-  If the query would return more than `limit` results, `status-internal-error` is returned."
-  [limit query paging-options db]
-  {:pre [(and (integer? limit) (>= limit 0))]}
+  If the query can't be parsed, a 400 is returned."
+  [query paging-options db]
   (try
     (with-transacted-connection db
-      (-> query
-        (json/parse-string true)
-        (r/v3-query->sql paging-options)
-        ((partial r/limited-query-resources limit paging-options))
-        (query-result-response)))
-    (catch com.fasterxml.jackson.core.JsonParseException e
-      (pl-http/error-response e))
+      (let [{[sql & params] :results-query
+             count-query    :count-query} (-> query
+                                              (json/parse-string true)
+                                              (r/v3-query->sql paging-options))
+             
+             resp (pl-http/json-response*
+                   (pl-http/streamed-response buffer
+                     ; NOTE - we we don't have a transaction here,
+                     ; then the outer transaction can end up being
+                     ; closed *after* the stream has been opened but
+                     ; before it's been read, causing a connection
+                     ; error when the caller tries to read it.
+                     (with-transacted-connection db
+                       (r/with-queried-resources sql params
+                         #(pl-http/stream-json % buffer)))))]
+        
+        (if count-query
+          (add-headers resp {:count (get-result-count count-query)})
+          resp)))
     (catch IllegalArgumentException e
       (pl-http/error-response e))
-    (catch IllegalStateException e
-      (pl-http/error-response e pl-http/status-internal-error))))
+    (catch com.fasterxml.jackson.core.JsonParseException e
+      (pl-http/error-response e))))
 
 (def query-app
   (app
     [&]
     {:get (comp (fn [{:keys [params globals paging-options]}]
                   (produce-body
-                    (:resource-query-limit globals)
                     (params "query")
                     paging-options
-                    (:scf-db globals)))
+                    (:scf-read-db globals)))
             http-q/restrict-query-to-active-nodes)}))
 
 (defn build-resources-app

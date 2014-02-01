@@ -4,10 +4,15 @@
 ;; functions.
 
 (ns com.puppetlabs.http
-  (:import [org.apache.http.impl EnglishReasonPhraseCatalog])
+  (:import [org.apache.http.impl EnglishReasonPhraseCatalog]
+           [java.io IOException Writer])
   (:require [ring.util.response :as rr]
-            [cheshire.core :as json]
+            [ring.util.io :as rio]
+            [com.puppetlabs.cheshire :as json]
+            [clojure.java.io :as io]
+            [clojure.tools.logging :as log]
             [clojure.reflect :as r]
+            [puppetlabs.kitchensink.core :as kitchensink]
             [clojure.string :as s]))
 
 
@@ -96,6 +101,20 @@
           (rr/response)
           (rr/status status-not-acceptable)))))
 
+(defn json-response*
+  "Returns a Ring response object with the supplied `body`, response
+  `code`, and a JSON content type and charset. `body` is assumed to
+  alredy be JSON-ified. To auto-serialize body to JSON, look at
+  `json-response`."
+  ([body]
+     (json-response* body status-ok))
+  ([body code]
+     (-> body
+         (rr/response)
+         (rr/header "Content-Type" "application/json")
+         (rr/charset "utf-8")
+         (rr/status code))))
+
 (defn json-response
   "Returns a Ring response object with the supplied `body` and response `code`,
   and a JSON content type. If unspecified, `code` will default to 200."
@@ -103,11 +122,8 @@
      (json-response body status-ok))
   ([body code]
      (-> body
-         (json/generate-string {:date-format "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'" :pretty true})
-         (rr/response)
-         (rr/header "Content-Type" "application/json")
-         (rr/charset "utf-8")
-         (rr/status code))))
+         json/generate-pretty-string
+         (json-response* code))))
 
 (def json-response-content-type "application/json; charset=utf-8")
 
@@ -154,6 +170,38 @@
                         [segs'
                          (conj strs (str delimiter (s/join delimiter segs')))]))]
        (second (reduce f [[] []] segments)))))
+
+(defn stream-json
+  "Serializes the supplied sequence to `buffer`, which is a `Writer`
+  object."
+  [coll buffer]
+  {:pre [(instance? Writer buffer)]}
+  (json/generate-pretty-stream coll buffer))
+
+(defmacro streamed-response
+  "Evaluates `body` in a thread, with a local variable (`writer-var`)
+  bound to a fresh, UTF-8 Writer object.
+
+  Returns an InputStream. The InputStream is connected to the Writer
+  by a pipe. Deadlock is prevented by executing `body` in a separate
+  thread, therefore allowing `body` (the producer) to execute
+  alongside the consumer of the returned InputStream.
+
+  As `body` is executed in a separate thread, it's not possible for
+  the caller to catch exceptions thrown by `body`. Errors are instead
+  logged."
+  [writer-var & body]
+  `(rio/piped-input-stream
+    (fn [ostream#]
+      (with-open [~writer-var (io/writer ostream# :encoding "UTF-8")]
+        (try
+          (do ~@body)
+          (catch IOException e#
+            ;; IOException includes things like broken pipes due to
+            ;; client disconnect, so no need to spam the log normally.
+            (log/debug e# "Error streaming response"))
+          (catch Exception e#
+            (log/error e# "Error streaming response")))))))
 
 (defn parse-boolean-query-param
   "Utility method for parsing a query parameter whose value is expected to be

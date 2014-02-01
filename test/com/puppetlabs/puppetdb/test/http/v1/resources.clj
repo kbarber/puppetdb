@@ -6,7 +6,8 @@
   (:use clojure.test
         ring.mock.request
         [com.puppetlabs.puppetdb.fixtures]
-        [com.puppetlabs.puppetdb.scf.storage :only [db-serialize to-jdbc-varchar-array deactivate-node!]]
+        [com.puppetlabs.puppetdb.scf.storage :only [deactivate-node!]]
+        [com.puppetlabs.puppetdb.scf.storage-utils :only [db-serialize to-jdbc-varchar-array]]
         [com.puppetlabs.jdbc :only (with-transacted-connection)]))
 
 (use-fixtures :each with-test-db with-http-app)
@@ -26,7 +27,10 @@
 
 (defn get-response
   ([]      (get-response nil))
-  ([query] (*app* (get-request "/v1/resources" query))))
+  ([query] (let [resp (*app* (get-request "/v1/resources" query))]
+             (if (string? (:body resp))
+               resp
+               (update-in resp [:body] slurp)))))
 
 (defn is-response-equal
   "Test if the HTTP request is a success, and if the result is equal
@@ -41,6 +45,13 @@ to the result of the form supplied to this method."
 (deftest resource-list-handler
   (with-transacted-connection *db*
     (sql/insert-records
+     :resource_params_cache
+     {:resource "1" :parameters (db-serialize {"ensure" "file"
+                                               "owner"  "root"
+                                               "group"  "root"
+                                               "acl"    ["john:rwx" "fred:rwx"]})}
+     {:resource "2" :parameters nil})
+    (sql/insert-records
      :resource_params
      {:resource "1" :name "ensure" :value (db-serialize "file")}
      {:resource "1" :name "owner"  :value (db-serialize "root")}
@@ -52,16 +63,12 @@ to the result of the form supplied to this method."
      {:name "two.local"})
     (sql/insert-records
      :catalogs
-     {:hash "foo" :api_version 1 :catalog_version "12"}
-     {:hash "bar" :api_version 1 :catalog_version "14"})
-    (sql/insert-records
-     :certname_catalogs
-     {:certname "one.local" :catalog "foo"}
-     {:certname "two.local" :catalog "bar"})
+     {:id 1 :hash "foo" :api_version 1 :catalog_version "12" :certname "one.local"}
+     {:id 2 :hash "bar" :api_version 1 :catalog_version "14" :certname "two.local"})
     (sql/insert-records :catalog_resources
-                        {:catalog "foo" :resource "1" :type "File" :title "/etc/passwd" :exported true :tags (to-jdbc-varchar-array ["one" "two"])}
-                        {:catalog "bar" :resource "1" :type "File" :title "/etc/passwd" :exported true :tags (to-jdbc-varchar-array ["one" "two"])}
-                        {:catalog "bar" :resource "2" :type "Notify" :title "hello" :exported true :file "/foo/bar" :line 22 :tags (to-jdbc-varchar-array [])}))
+                        {:catalog_id 1 :resource "1" :type "File" :title "/etc/passwd" :exported true :tags (to-jdbc-varchar-array ["one" "two"])}
+                        {:catalog_id 2 :resource "1" :type "File" :title "/etc/passwd" :exported true :tags (to-jdbc-varchar-array ["one" "two"])}
+                        {:catalog_id 2 :resource "2" :type "Notify" :title "hello" :exported true :file "/foo/bar" :line 22 :tags (to-jdbc-varchar-array [])}))
 
   (let [foo1 {:certname   "one.local"
               :resource   "1"
@@ -147,14 +154,6 @@ to the result of the form supplied to this method."
             response (get-response query)]
         (is (= pl-http/status-bad-request (:status response)))
         (is (= "file is not a queryable object for resources" (:body response)))))
-
-    (testing "query exceeding resource-query-limit"
-      (with-http-app {:resource-query-limit 1}
-        (fn []
-          (let [response (get-response ["=" "type" "File"])
-                body     (get response :body "null")]
-            (is (= (:status response) pl-http/status-internal-error))
-            (is (re-find #"more than the maximum number of results" body))))))
 
     (testing "querying against inactive nodes"
       (deactivate-node! "one.local")

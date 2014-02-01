@@ -1,6 +1,6 @@
 (ns com.puppetlabs.puppetdb.http.v3.nodes
   (:require [com.puppetlabs.puppetdb.query.paging :as paging]
-            [cheshire.core :as json]
+            [com.puppetlabs.cheshire :as json]
             [com.puppetlabs.puppetdb.query.nodes :as node]
             [com.puppetlabs.puppetdb.http.v3.facts :as f]
             [com.puppetlabs.puppetdb.http.v3.resources :as r]
@@ -40,12 +40,12 @@
     []
     {:get (comp
             (fn [{:keys [params globals paging-options]}]
-              (search-nodes (params "query") paging-options (:scf-db globals)))
+              (search-nodes (params "query") paging-options (:scf-read-db globals)))
             http-q/restrict-query-to-active-nodes)}
 
     [node]
     {:get (fn [{:keys [globals]}]
-            (node-status node (:scf-db globals)))}
+            (node-status node (:scf-read-db globals)))}
 
     [node "facts" &]
     (comp f/facts-app (partial http-q/restrict-query-to-node node))

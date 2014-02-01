@@ -1,12 +1,13 @@
 (ns com.puppetlabs.puppetdb.http.v2.resources
-  (:require [com.puppetlabs.puppetdb.http.query :as http-q]
-            [com.puppetlabs.http :as pl-http]
+  (:require [com.puppetlabs.http :as pl-http]
             [com.puppetlabs.puppetdb.query.resources :as r]
-            [cheshire.core :as json])
+            [com.puppetlabs.puppetdb.http.query :as http-q]
+            [ring.util.response :as rr]
+            [com.puppetlabs.cheshire :as json])
   (:use [net.cgrand.moustache :only [app]]
-        [com.puppetlabs.middleware :only (verify-accepts-json validate-query-params wrap-with-paging-options)]
-        [com.puppetlabs.jdbc :only (with-transacted-connection)]
-        [com.puppetlabs.puppetdb.http :only (query-result-response)]))
+        [com.puppetlabs.middleware :only (verify-accepts-json validate-query-params)]
+        [com.puppetlabs.jdbc :only (with-transacted-connection get-result-count)]
+        [com.puppetlabs.puppetdb.http :only (query-result-response add-headers)]))
 
 
 (defn munge-result-rows
@@ -15,38 +16,39 @@
   (map #(clojure.set/rename-keys % {:file :sourcefile :line :sourceline}) rows))
 
 (defn produce-body
-  "Given a `limit`, a query, and database connection, return a Ring
-  response with the query results.
+  "Given a a query, and database connection, return a Ring response
+  with the query results.
 
-  If the query can't be parsed, a 400 is returned.
-
-  If the query would return more than `limit` results, `status-internal-error` is returned."
-  [limit query paging-options db]
-  {:pre [(and (integer? limit) (>= limit 0))]}
+  If the query can't be parsed, a 400 is returned."
+  [query paging-options db]
   (try
-    (with-transacted-connection db
-      (-> query
-        (json/parse-string true)
-        (r/v2-query->sql paging-options)
-        ((partial r/limited-query-resources limit))
-        (update-in [:result] munge-result-rows)
-        (query-result-response)))
-    (catch com.fasterxml.jackson.core.JsonParseException e
-      (pl-http/error-response e))
+    (let [{[sql & params] :results-query
+           count-query   :count-query} (with-transacted-connection db
+                                         (-> query
+                                             (json/parse-string true)
+                                             (r/v2-query->sql paging-options)))
+           response       (pl-http/json-response*
+                           (pl-http/streamed-response buffer
+                             (with-transacted-connection db
+                               (r/with-queried-resources sql params (comp #(pl-http/stream-json % buffer) munge-result-rows)))))]
+      (if count-query
+        (add-headers response {:count (get-result-count count-query)})
+        response))
+
     (catch IllegalArgumentException e
+      ;; Query compilation error
       (pl-http/error-response e))
-    (catch IllegalStateException e
-      (pl-http/error-response e pl-http/status-internal-error))))
+    (catch com.fasterxml.jackson.core.JsonParseException e
+      (pl-http/error-response e))))
 
 (def query-app
   (app
     [&]
     {:get (comp (fn [{:keys [params globals]}]
                   (produce-body
-                    (:resource-query-limit globals)
                     (params "query")
                     {}
-                    (:scf-db globals)))
+                    (:scf-read-db globals)))
                 http-q/restrict-query-to-active-nodes)}))
 
 (defn build-resources-app
@@ -66,3 +68,7 @@
     (validate-query-params query-app {:optional ["query"]})))
 
 
+;; Local Variables:
+;; mode: clojure
+;; eval: (define-clojure-indent (test-msg-handler (quote defun)))
+;; End:

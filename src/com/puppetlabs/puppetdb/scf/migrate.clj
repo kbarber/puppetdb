@@ -51,14 +51,17 @@
   (:require [clojure.java.jdbc :as sql]
             [clojure.tools.logging :as log]
             [clojure.string :as string]
-            [com.puppetlabs.utils :as utils])
+            [com.puppetlabs.cheshire :as json]
+            [puppetlabs.kitchensink.core :as kitchensink])
   (:use [clojure.set]
         [clj-time.coerce :only [to-timestamp]]
         [clj-time.core :only [now]]
-        [com.puppetlabs.jdbc :only [query-to-vec]]
-        [com.puppetlabs.puppetdb.scf.storage :only [sql-array-type-string
-                                                    sql-current-connection-database-name
-                                                    sql-current-connection-database-version]]))
+        [com.puppetlabs.jdbc :only [query-to-vec with-query-results-cursor]]
+        [com.puppetlabs.puppetdb.scf.storage-utils :only [sql-array-type-string
+                                                          sql-current-connection-database-name
+                                                          sql-current-connection-database-version
+                                                          postgres?
+                                                          pg-newer-than-8-1?]]))
 
 (defn- drop-constraints
   "Drop all constraints of given `constraint-type` on `table`."
@@ -215,8 +218,8 @@
     "CREATE INDEX idx_catalog_resources_catalog ON catalog_resources(catalog)"
     "CREATE INDEX idx_catalog_resources_type_title ON catalog_resources(type,title)")
 
-  (when (= (sql-current-connection-database-name) "PostgreSQL")
-    (if (pos? (compare (sql-current-connection-database-version) [8 1]))
+  (when (postgres?)
+    (if (pg-newer-than-8-1?)
       (sql/do-commands
         "CREATE INDEX idx_catalog_resources_tags_gin ON catalog_resources USING gin(tags)")
       (log/warn (format "Version %s of PostgreSQL is too old to support fast tag searches; skipping GIN index on tags. For reliability and performance reasons, consider upgrading to the latest stable version." (string/join "." (sql-current-connection-database-version)))))))
@@ -239,7 +242,7 @@
   "Renames the `fact` column on `certname_facts` to `name`, for consistency."
   []
   (sql/do-commands
-    (if (= (sql-current-connection-database-name) "PostgreSQL")
+    (if (postgres?)
       "ALTER TABLE certname_facts RENAME COLUMN fact TO name"
       "ALTER TABLE certname_facts ALTER COLUMN fact RENAME TO name")
     "ALTER INDEX idx_certname_facts_fact RENAME TO idx_certname_facts_name"))
@@ -296,6 +299,44 @@
   (sql/do-commands
     "CREATE INDEX idx_resource_events_timestamp ON resource_events(timestamp)"))
 
+(defn add-parameter-cache
+  "Creates the new resource_params_cache table, and populates it using
+  the existing parameters in the database."
+  []
+  ;; Create cache table
+  (sql/create-table :resource_params_cache
+                    ["resource" "VARCHAR(40)"]
+                    ["parameters" "TEXT"]
+                    ["PRIMARY KEY (resource)"])
+
+  (log/warn "Building resource parameters cache. This make take a few minutes, but faster resource queries are worth it.")
+
+  ;; Loop over all parameters, and insert a cache entry for each resource
+  (let [query    "SELECT resource, name, value from resource_params ORDER BY resource"
+        collapse (fn [rows]
+                   (let [resource (:resource (first rows))
+                         params   (into {} (map #(vector (:name %) (json/parse-string (:value %))) rows))]
+                     [resource params]))]
+
+    (with-query-results-cursor query [] rs
+      (let [param-sets (->> rs
+                            (partition-by :resource)
+                            (map collapse))]
+        (doseq [[resource params] param-sets]
+          (sql/insert-record :resource_params_cache {:resource   resource
+                                                     :parameters (json/generate-string params)})))))
+
+  ;; Create NULL entries for resources that have no parameters
+  (sql/do-commands
+   "INSERT INTO resource_params_cache
+    SELECT DISTINCT resource, NULL FROM catalog_resources WHERE NOT EXISTS
+    (SELECT 1 FROM resource_params WHERE resource=catalog_resources.resource)")
+
+  (sql/do-commands
+   "ALTER TABLE catalog_resources ADD FOREIGN KEY (resource) REFERENCES resource_params_cache(resource) ON DELETE CASCADE")
+
+  (sql/do-commands
+   "ALTER TABLE resource_params ADD FOREIGN KEY (resource) REFERENCES resource_params_cache(resource) ON DELETE CASCADE"))
 
 (defn add-event-status-index
   "Add an index to the `status` column of the event table."
@@ -341,10 +382,10 @@
     "ALTER TABLE catalogs ADD COLUMN transaction_uuid VARCHAR(255) DEFAULT NULL"
     "CREATE INDEX idx_catalogs_transaction_uuid ON catalogs(transaction_uuid)")
   (sql/do-commands
-    (if (= (sql-current-connection-database-name) "PostgreSQL")
+    (if (postgres?)
       "ALTER TABLE catalog_resources RENAME COLUMN sourcefile TO file"
       "ALTER TABLE catalog_resources ALTER COLUMN sourcefile RENAME TO file")
-    (if (= (sql-current-connection-database-name) "PostgreSQL")
+    (if (postgres?)
       "ALTER TABLE catalog_resources RENAME COLUMN sourceline TO line"
       "ALTER TABLE catalog_resources ALTER COLUMN sourceline RENAME TO line")))
 
@@ -367,6 +408,257 @@
           ON reports.certname = latest.certname
           AND reports.end_time = latest.max_end_time"))
 
+(defn drop-duplicate-indexes
+  "Remove indexes that are duplicated by primary keys or other
+  constraints"
+  []
+  (sql/do-commands "DROP INDEX idx_catalogs_hash")
+  (sql/do-commands "DROP INDEX idx_certname_catalogs_certname"))
+
+(defn drop-resource-tags-index
+  "Remove the resource tags index, it can get very large and is not used"
+  []
+  (when (pg-newer-than-8-1?)
+    (sql/do-commands "DROP INDEX IF EXISTS idx_catalog_resources_tags_gin")))
+
+(defn use-bigint-instead-of-catalog-hash
+  "This migration converts all catalog hash instances to use bigint sequences instead"
+  []
+  (sql/do-commands
+    ;; catalogs: Create new table without constraints
+    "CREATE TABLE catalogs_transform (
+      id bigserial NOT NULL,
+      hash character varying(40) NOT NULL,
+      api_version integer NOT NULL,
+      catalog_version text NOT NULL,
+      transaction_uuid character varying(255) DEFAULT NULL)"
+
+    ;; catalogs: Insert data from old table
+    "INSERT INTO catalogs_transform (hash, api_version, catalog_version, transaction_uuid)
+      SELECT hash, api_version, catalog_version, transaction_uuid
+        FROM catalogs"
+
+    ;; certname_catalogs: Create new table without constraints
+    "CREATE TABLE certname_catalogs_transform (
+      catalog_id bigint NOT NULL,
+      certname text NOT NULL,
+      timestamp TIMESTAMP WITH TIME ZONE)"
+
+    ;; certname_catalogs: insert data from old table
+    "INSERT INTO certname_catalogs_transform (catalog_id, certname, timestamp)
+      SELECT c.id, certname, timestamp
+        FROM certname_catalogs cc, catalogs_transform c
+        WHERE cc.catalog = c.hash"
+
+    ;; edges: create new table
+    "CREATE TABLE edges_transform (
+      catalog_id bigint NOT NULL,
+      source character varying(40) NOT NULL,
+      target character varying(40) NOT NULL,
+      type text NOT NULL)"
+
+    ;; edges: insert data from old table
+    "INSERT INTO edges_transform (catalog_id, source, target, type)
+      SELECT c.id, source, target, type
+        FROM edges e, catalogs_transform c
+        WHERE e.catalog = c.hash"
+
+    ;; catalog_resources: create new table
+    (str "CREATE TABLE catalog_resources_transform (
+      catalog_id bigint NOT NULL,
+      resource character varying(40) NOT NULL,
+      type text NOT NULL,
+      title text NOT NULL,
+      tags " (sql-array-type-string "TEXT") " NOT NULL,
+      exported boolean NOT NULL,
+      file text,
+      line integer)")
+
+    ;; catalog_resources: insert data from old table
+    "INSERT INTO catalog_resources_transform (catalog_id, resource, type, title, tags, exported, file, line)
+      SELECT c.id, resource, type, title, tags, exported, file, line
+        FROM catalog_resources cr, catalogs_transform c
+        WHERE cr.catalog = c.hash"
+
+    ;; Drop the old tables
+    "DROP TABLE catalog_resources"
+    "DROP TABLE certname_catalogs"
+    "DROP TABLE edges"
+    "DROP TABLE catalogs"
+
+    ;; Rename the new tables
+    "ALTER TABLE catalog_resources_transform RENAME to catalog_resources"
+    "ALTER TABLE certname_catalogs_transform RENAME to certname_catalogs"
+    "ALTER TABLE edges_transform RENAME to edges"
+    "ALTER TABLE catalogs_transform RENAME to catalogs"
+
+    ;; catalogs: Add constraints to new catalogs table
+    ;;   hsqldb automatically creates the primary key when we created the table
+    ;;   with a bigserial so its only needed for pgsql.
+    (if (postgres?)
+      "ALTER TABLE catalogs
+        ADD CONSTRAINT catalogs_pkey PRIMARY KEY (id)"
+      "select 1")
+    "ALTER TABLE catalogs
+      ADD CONSTRAINT catalogs_hash_key UNIQUE (hash)"
+
+    ;; catalogs: create other indexes
+    "CREATE INDEX idx_catalogs_transaction_uuid
+      ON catalogs (transaction_uuid)"
+
+    ;; certname_catalogs: Add constraints
+    "ALTER TABLE certname_catalogs
+      ADD CONSTRAINT certname_catalogs_pkey PRIMARY KEY (certname, catalog_id)"
+    "ALTER TABLE certname_catalogs
+      ADD CONSTRAINT certname_catalogs_catalog_id_fkey FOREIGN KEY (catalog_id)
+          REFERENCES catalogs (id)
+          ON UPDATE NO ACTION ON DELETE CASCADE"
+    "ALTER TABLE certname_catalogs
+      ADD CONSTRAINT certname_catalogs_certname_fkey FOREIGN KEY (certname)
+          REFERENCES certnames (name)
+          ON UPDATE NO ACTION ON DELETE CASCADE"
+    "ALTER TABLE certname_catalogs
+      ADD CONSTRAINT certname_catalogs_certname_key UNIQUE (certname)"
+
+    ;; edges: add constraints
+    "ALTER TABLE edges
+      ADD CONSTRAINT edges_pkey PRIMARY KEY (catalog_id, source, target, type)"
+    "ALTER TABLE edges
+      ADD CONSTRAINT edges_catalog_id_fkey FOREIGN KEY (catalog_id)
+          REFERENCES catalogs (id)
+          ON UPDATE NO ACTION ON DELETE CASCADE"
+
+    ;; catalog_resources: add constraints
+    "ALTER TABLE catalog_resources
+      ADD CONSTRAINT catalog_resources_pkey PRIMARY KEY (catalog_id, resource)"
+    "ALTER TABLE catalog_resources
+      ADD CONSTRAINT catalog_resources_catalog_id_fkey FOREIGN KEY (catalog_id)
+          REFERENCES catalogs (id)
+          ON UPDATE NO ACTION ON DELETE CASCADE"
+    "ALTER TABLE catalog_resources
+      ADD CONSTRAINT catalog_resources_resource_fkey FOREIGN KEY (resource)
+          REFERENCES resource_params_cache (resource)
+          ON UPDATE NO ACTION ON DELETE CASCADE"
+
+    ;; catalog_resources: create other indexes
+    "CREATE INDEX idx_catalog_resources_resource
+      ON catalog_resources (resource)"
+
+    "CREATE INDEX idx_catalog_resources_type
+      ON catalog_resources (type)"
+
+    "CREATE INDEX idx_catalog_resources_type_title
+      ON catalog_resources (type)"))
+
+(defn add-index-on-exported-column
+  "This migration adds an index to catalog_resources.exported. It will
+  optionally create a partial index on PostgreSQL to reduce disk space, and
+  since the more common value is false its not useful to index this."
+  []
+  (sql/do-commands
+    (if (postgres?)
+      "CREATE INDEX idx_catalog_resources_exported_true
+         ON catalog_resources (exported) WHERE exported = true"
+      "CREATE INDEX idx_catalog_resources_exported
+         ON catalog_resources (exported)")))
+
+(defn differential-edges
+  "Convert edges so it becomes a 1 to many relationship with certnames
+  instead of catalogs. This is so we can adequately do differential edge
+  inserts/deletes otherwise this would prove difficult as catalogs is still
+  incremental. Once catalogs and catalog_resources are converted to
+  differential updates this table can be reassociated with catalogs if
+  desired."
+  []
+  ;; Start by doing a garbage collect on catalogs, so there is a 1 to 1 mapping for edges
+  (sql/delete-rows :catalogs ["NOT EXISTS (SELECT * FROM certname_catalogs cc WHERE cc.catalog_id=catalogs.id)"])
+  (sql/do-commands
+    ;; Create the new edges table
+    "CREATE TABLE edges_transform (
+      certname text NOT NULL,
+      source character varying(40) NOT NULL,
+      target character varying(40) NOT NULL,
+      type text NOT NULL)"
+
+    ;; Migrate data from old table
+    "INSERT INTO edges_transform (certname, source, target, type)
+      SELECT cc.certname, e.source, e.target, e.type
+        FROM edges e, catalogs c, certname_catalogs cc
+        WHERE e.catalog_id = c.id and cc.catalog_id = c.id"
+
+    ;; Drop old table
+    "DROP TABLE edges"
+
+    ;; Rename the new table
+    "ALTER TABLE edges_transform RENAME TO edges"
+
+    ;; Add foreign key constraints
+    "ALTER TABLE edges
+      ADD CONSTRAINT edges_certname_fkey FOREIGN KEY (certname)
+          REFERENCES certnames (name)
+          ON UPDATE NO ACTION ON DELETE CASCADE"
+
+    ;; Add unique constraint to edge table
+    "ALTER TABLE edges
+      ADD CONSTRAINT edges_certname_source_target_type_unique_key UNIQUE (certname, source, target, type)"))
+
+(defn differential-catalog-resources []
+
+  (sql/delete-rows :catalogs ["NOT EXISTS (SELECT * FROM certname_catalogs cc WHERE cc.catalog_id=catalogs.id)"])
+  (sql/delete-rows :catalog_resources ["NOT EXISTS (SELECT * FROM certname_catalogs cc WHERE cc.catalog_id=catalog_resources.catalog_id)"])
+
+  (sql/create-table :catalogs_transform
+                    ["id" "bigserial NOT NULL"]
+                    ["hash" "character varying(40) NOT NULL"]
+                    ["api_version" "INTEGER NOT NULL"]
+                    ["catalog_version" "TEXT NOT NULL"]
+                    ["transaction_uuid" "CHARACTER VARYING(255) DEFAULT NULL"]
+                    ["timestamp" "TIMESTAMP WITH TIME ZONE"]
+                    ["certname" "TEXT NOT NULL"])
+
+  (apply
+   sql/do-commands
+   (remove nil?
+           [;;Populate the new catalogs_transform table with data from
+            ;;catalogs and certname_catalogs
+            "INSERT INTO catalogs_transform (id, hash, api_version, catalog_version, transaction_uuid, timestamp, certname)
+             SELECT c.id, c.hash, c.api_version, c.catalog_version, c.transaction_uuid, cc.timestamp, cc.certname
+             FROM catalogs c INNER JOIN certname_catalogs cc on c.id = cc.catalog_id"
+
+            "DROP TABLE certname_catalogs"
+
+            ;;Can't drop catalogs with this constraint still attached
+            "ALTER TABLE catalog_resources DROP CONSTRAINT catalog_resources_catalog_id_fkey"
+            "DROP TABLE catalogs"
+
+            ;;Rename catalogs_transform to catalogs, replace constraints
+            "ALTER TABLE catalogs_transform RENAME to catalogs"
+            
+            (when (postgres?)
+              "ALTER TABLE catalogs
+               ADD CONSTRAINT catalogs_pkey PRIMARY KEY (id)")
+
+            "ALTER TABLE catalog_resources
+             ADD CONSTRAINT catalog_resources_catalog_id_fkey FOREIGN KEY (catalog_id)
+             REFERENCES catalogs (id)
+             ON UPDATE NO ACTION ON DELETE CASCADE"
+            
+            "ALTER TABLE catalogs
+             ADD CONSTRAINT catalogs_certname_fkey FOREIGN KEY (certname)
+             REFERENCES certnames (name)
+             ON UPDATE NO ACTION ON DELETE CASCADE"
+
+            "ALTER TABLE catalogs
+             ADD CONSTRAINT catalogs_hash_key UNIQUE (hash)"
+            "ALTER TABLE catalogs
+             ADD CONSTRAINT catalogs_certname_key UNIQUE (certname)"
+
+            "CREATE INDEX idx_catalogs_transaction_uuid
+             ON catalogs (transaction_uuid)"
+
+            "ALTER TABLE catalog_resources DROP CONSTRAINT catalog_resources_pkey"
+            "ALTER TABLE catalog_resources ADD CONSTRAINT catalog_resources_pkey PRIMARY KEY (catalog_id, type, title)"])))
+
 ;; The available migrations, as a map from migration version to migration function.
 (def migrations
   {1 initialize-store
@@ -381,7 +673,14 @@
    10 add-event-status-index
    11 increase-puppet-version-field-length
    12 burgundy-schema-changes
-   13 add-latest-reports-table})
+   13 add-latest-reports-table
+   14 add-parameter-cache
+   15 drop-duplicate-indexes
+   16 drop-resource-tags-index
+   17 use-bigint-instead-of-catalog-hash
+   18 add-index-on-exported-column
+   19 differential-edges
+   20 differential-catalog-resources})
 
 (def desired-schema-version (apply max (keys migrations)))
 
@@ -415,7 +714,7 @@
           (sorted? %)
           (apply < 0 (keys %))
           (<= (count %) (count migrations))]}
-  (let [pending (difference (utils/keyset migrations) (applied-migrations))]
+  (let [pending (difference (kitchensink/keyset migrations) (applied-migrations))]
       (into (sorted-map)
         (select-keys migrations pending))))
 
@@ -423,7 +722,7 @@
   "Migrates database to the latest schema version. Does nothing if database is
   already at the latest schema version."
   []
-  (if-let [unexpected (first (difference (applied-migrations) (utils/keyset migrations)))]
+  (if-let [unexpected (first (difference (applied-migrations) (kitchensink/keyset migrations)))]
     (throw (IllegalStateException.
               (format "Your PuppetDB database contains a schema migration numbered %d, but this version of PuppetDB does not recognize that version."
                     unexpected))))
@@ -432,6 +731,13 @@
     (sql/transaction
      (doseq [[version migration] pending]
        (log/info (format "Applying migration version %d" version))
-       (migration)
-       (record-migration! version)))
+       (try
+         (migration)
+         (record-migration! version)
+         (catch java.sql.SQLException e
+           (log/error e "Caught SQLException during migration")
+           (let [next (.getNextException e)]
+             (when-not (nil? next)
+               (log/error next "Unravelled exception")))
+           (System/exit 1)))))
     (log/info "There are no pending migrations")))

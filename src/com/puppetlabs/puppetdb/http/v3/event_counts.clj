@@ -1,7 +1,7 @@
 (ns com.puppetlabs.puppetdb.http.v3.event-counts
   (:require [com.puppetlabs.http :as pl-http]
             [com.puppetlabs.puppetdb.query.event-counts :as event-counts]
-            [cheshire.core :as json]
+            [com.puppetlabs.cheshire :as json]
             [com.puppetlabs.puppetdb.query.paging :as paging])
   (:use     [com.puppetlabs.jdbc :only (with-transacted-connection)]
             [com.puppetlabs.middleware :only [verify-accepts-json validate-query-params wrap-with-paging-options]]
@@ -42,7 +42,7 @@
   (app
     [""]
     {:get (fn [{:keys [params globals paging-options]}]
-            (produce-body params paging-options (:scf-db globals)))}))
+            (produce-body params paging-options (:scf-read-db globals)))}))
 
 (def event-counts-app
   "Ring app for querying for summary information about resource events."

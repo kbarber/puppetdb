@@ -20,7 +20,7 @@ test_name "export and import tools" do
   export_file2 = "./puppetdb-export2.tar.gz"
 
   step "export data from puppetdb" do
-    on database, "#{sbin_loc}/puppetdb-export --outfile #{export_file1}"
+    on database, "#{sbin_loc}/puppetdb export --outfile #{export_file1}"
     scp_from(database, export_file1, ".")
   end
 
@@ -29,12 +29,12 @@ test_name "export and import tools" do
   end
 
   step "import data into puppetdb" do
-    on database, "#{sbin_loc}/puppetdb-import --infile #{export_file1}"
+    on database, "#{sbin_loc}/puppetdb import --infile #{export_file1}"
     sleep_until_queue_empty(database)
   end
 
   step "export data from puppetdb again" do
-    on database, "#{sbin_loc}/puppetdb-export --outfile #{export_file2}"
+    on database, "#{sbin_loc}/puppetdb export --outfile #{export_file2}"
     scp_from(database, export_file2, ".")
   end
 
@@ -47,12 +47,12 @@ test_name "export and import tools" do
   end
 
   step "import data into puppetdb with specific port and host" do
-    on database, "#{sbin_loc}/puppetdb-import -p 8080 -H localhost --infile #{export_file1}"
+    on database, "#{sbin_loc}/puppetdb import -p 8080 -H localhost --infile #{export_file1}"
     sleep_until_queue_empty(database)
   end
 
   step "export data from puppetdb again with specific port and host" do
-    on database, "#{sbin_loc}/puppetdb-export -p 8080 -H localhost --outfile #{export_file2}"
+    on database, "#{sbin_loc}/puppetdb export -p 8080 -H localhost --outfile #{export_file2}"
     scp_from(database, export_file2, ".")
   end
 

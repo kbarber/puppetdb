@@ -63,16 +63,16 @@
             [com.puppetlabs.puppetdb.reports :as report]
             [com.puppetlabs.puppetdb.command.dlo :as dlo]
             [com.puppetlabs.mq :as mq]
-            [com.puppetlabs.utils :as pl-utils]
+            [puppetlabs.kitchensink.core :as kitchensink]
             [clj-http.client :as client]
-            [cheshire.core :as json]
+            [com.puppetlabs.cheshire :as json]
             [clamq.protocol.consumer :as mq-cons]
             [clamq.protocol.producer :as mq-producer]
-            [clamq.protocol.connection :as mq-conn])
+            [clamq.protocol.connection :as mq-conn]
+            [com.puppetlabs.jdbc :as jdbc])
   (:use [slingshot.slingshot :only [try+ throw+]]
         [cheshire.custom :only (JSONable)]
         [clj-http.util :only [url-encode]]
-        [com.puppetlabs.jdbc :only (with-transacted-connection)]
         [com.puppetlabs.puppetdb.command.constants :only [command-names]]
         [metrics.meters :only (meter mark!)]
         [metrics.histograms :only (histogram update!)]
@@ -175,8 +175,8 @@
           (map? (:annotations %))]}
   (let [message     (json/parse-string command-string true)
         annotations (get message :annotations {})
-        received    (get annotations :received (pl-utils/timestamp))
-        id          (get annotations :id (pl-utils/uuid))
+        received    (get annotations :received (kitchensink/timestamp))
+        id          (get annotations :id (kitchensink/uuid))
         annotations (-> annotations
                         (assoc :received received)
                         (assoc :id id))]
@@ -200,8 +200,8 @@
   {:pre  [(map? message)]
    :post [(map? %)]}
   (-> message
-      (assoc-in [:annotations :received] (pl-utils/timestamp))
-      (assoc-in [:annotations :id] (pl-utils/uuid))))
+      (assoc-in [:annotations :received] (kitchensink/timestamp))
+      (assoc-in [:annotations :id] (kitchensink/uuid))))
 
 ;; ## Command submission
 
@@ -223,7 +223,7 @@
             (map? command-map)]}
      (let [message (json/generate-string command-map)
            body    (format "checksum=%s&payload=%s"
-                           (pl-utils/utf8-string->sha1 message)
+                           (kitchensink/utf8-string->sha1 message)
                            (url-encode message))
            url     (format "http://%s:%s/v2/commands" host port)]
        (client/post url {:body               body
@@ -250,7 +250,7 @@
                                  (annotate-command))]
                      [(json/generate-string cmd) (get-in cmd [:annotations :id])])
                    (catch com.fasterxml.jackson.core.JsonParseException e
-                     [raw-command (pl-utils/uuid)]))]
+                     [raw-command (kitchensink/uuid)]))]
     (with-open [conn (mq/connect! mq-spec)]
       (mq/connect-and-publish! conn mq-endpoint msg))
     id))
@@ -306,16 +306,16 @@
 ;; Catalog replacement
 
 (defn replace-catalog*
-  [{:keys [payload annotations version]} {:keys [db]}]
+  [{:keys [payload annotations version]} {:keys [db catalog-hash-debug-dir]}]
   (let [catalog (upon-error-throw-fatality (cat/parse-catalog payload version))
         certname (:certname catalog)
         id (:id annotations)
         timestamp (:received annotations)]
-    (with-transacted-connection db
+    (jdbc/with-transacted-connection' db :repeatable-read
       (scf-storage/maybe-activate-node! certname timestamp)
       ;; Only store a catalog if it's newer than the current catalog
       (if-not (scf-storage/catalog-newer-than? certname timestamp)
-        (scf-storage/replace-catalog! catalog timestamp)))
+        (scf-storage/replace-catalog! catalog timestamp catalog-hash-debug-dir)))
     (log/info (format "[%s] [%s] %s" id (command-names :replace-catalog) certname))))
 
 (defmethod process-command! [(command-names :replace-catalog) 1]
@@ -344,10 +344,10 @@
   (let [{:strs [name] :as facts} (upon-error-throw-fatality (json/parse-string payload))
         id                       (:id annotations)
         timestamp                (:received annotations)]
-    (with-transacted-connection db
+    
+    (jdbc/with-transacted-connection' db :repeatable-read
       (scf-storage/maybe-activate-node! name timestamp)
-      (if-not (scf-storage/facts-newer-than? name timestamp)
-        (scf-storage/replace-facts! facts timestamp)))
+      (scf-storage/replace-facts! facts timestamp))
     (log/info (format "[%s] [%s] %s" id (command-names :replace-facts) name))))
 
 ;; Node deactivation
@@ -356,7 +356,7 @@
   [{:keys [payload annotations]} {:keys [db]}]
   (let [certname (upon-error-throw-fatality (json/parse-string payload))
         id       (:id annotations)]
-    (with-transacted-connection db
+    (jdbc/with-transacted-connection db
       (when-not (scf-storage/certname-exists? certname)
         (scf-storage/add-certname! certname))
       (scf-storage/deactivate-node! certname))
@@ -371,7 +371,7 @@
                       (report/validate! version payload))
         certname    (:certname report)
         timestamp   (:received annotations)]
-    (with-transacted-connection db
+    (jdbc/with-transacted-connection db
       (scf-storage/maybe-activate-node! certname timestamp)
       (scf-storage/add-report! report timestamp))
     (log/info (format "[%s] [%s] puppet v%s - %s"
@@ -438,7 +438,7 @@
    :post [(= (count (get-in % [:annotations :attempts]))
              (inc (count (:attempts annotations))))]}
   (let [attempts (get annotations :attempts [])
-        attempt  {:timestamp (pl-utils/timestamp)
+        attempt  {:timestamp (kitchensink/timestamp)
                   :error     (str e)
                   :trace     (map str (.getStackTrace e))}]
     (update-in msg [:annotations :attempts] conj attempt)))
@@ -581,11 +581,13 @@
         n       (inc attempt)
         delay   (+ (Math/pow 2 (dec n))
                    (rand-int (Math/pow 2 n)))
-        logger  (if (> n (/ maximum-allowable-retries 4))
-                  #(log/error %)
-                  #(log/debug %))]
-    (logger (format "[%s] [%s] Retrying after attempt %d, due to: %s"
-                    id command attempt e))
+        error-msg (format "[%s] [%s] Retrying after attempt %d, due to: %s"
+                          id command attempt e)]
+
+    (if (> n (/ maximum-allowable-retries 4))
+      (log/error e error-msg)
+      (log/debug e error-msg))
+
     (publish-fn (json/generate-string msg) (mq/delay-property delay :seconds))))
 
 ;; ### Message handler

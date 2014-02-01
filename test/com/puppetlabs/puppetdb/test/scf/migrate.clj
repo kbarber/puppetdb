@@ -1,12 +1,14 @@
 (ns com.puppetlabs.puppetdb.test.scf.migrate
   (:require [com.puppetlabs.puppetdb.scf.migrate :as migrate]
+            [com.puppetlabs.puppetdb.scf.storage-utils :refer [db-serialize]]
+            [cheshire.core :as json]
             [clojure.java.jdbc :as sql])
   (:use [com.puppetlabs.puppetdb.scf.migrate]
         [clj-time.coerce :only [to-timestamp]]
         [clj-time.core :only [now ago days secs]]
         [clojure.test]
         [clojure.set]
-        [com.puppetlabs.utils :only [mapvals]]
+        [puppetlabs.kitchensink.core :only [mapvals]]
         [com.puppetlabs.jdbc :only [query-to-vec with-transacted-connection]]
         [com.puppetlabs.puppetdb.testutils :only [clear-db-for-testing! test-db]]
         [com.puppetlabs.puppetdb.examples.reports]
@@ -58,11 +60,11 @@
 
         (testing "should attempt a partial migration if there are migrations missing"
           (clear-db-for-testing!)
-          ;; we are using migration 6 here because it's just dropping an index,
-          ;; so we know for sure that it can be applied in any order.
-          (doseq [m (filter (fn [[i migration]] (not= i 6)) (pending-migrations))]
+          ;; We are using migration 13 here because it is isolated enough to be able
+          ;; to execute on its own. This might need to be changed in the future.
+          (doseq [m (filter (fn [[i migration]] (not= i 13)) (pending-migrations))]
             (apply-migration-for-testing (first m)))
-          (is (= (keys (pending-migrations)) '(6)))
+          (is (= (keys (pending-migrations)) '(13)))
           (migrate!)
           (is (= (applied-migrations) expected-migrations))))))
 
@@ -113,3 +115,46 @@
           (is (= 2 (count latest_reports)))
           (doseq [report latest_reports]
             (is (= (:end_time report) (to-timestamp new-timestamp)))))))))
+
+(deftest migration-14
+  (testing "building parameter cache"
+    (sql/with-connection db
+      (clear-db-for-testing!)
+      ;; Migrate to prior to the cache table
+      (doseq [[i migration] (sort migrations)
+              :while (< i 14)]
+        (migration)
+        (record-migration! i))
+
+      ;; Now add some resource parameters
+      (sql/insert-records
+       :resource_params
+       {:resource "1" :name "ensure"  :value (db-serialize "file")}
+       {:resource "1" :name "owner"   :value (db-serialize "root")}
+       {:resource "1" :name "group"   :value (db-serialize "root")}
+       {:resource "2" :name "random"  :value (db-serialize "true")}
+       ;; resource 3 deliberately left blank
+       {:resource "4" :name "ensure"  :value (db-serialize "present")}
+       {:resource "4" :name "content" :value (db-serialize "#!/usr/bin/make\nall:\n\techo done\n")}
+       {:resource "5" :name "random"  :value (db-serialize "false")}
+       {:resource "6" :name "multi"   :value (db-serialize ["one" "two" "three"])}
+       {:resource "7" :name "hash"    :value (db-serialize (sorted-map  "foo" 5 "bar" 10))})
+
+      ;; Now add the parameter cache
+      (add-parameter-cache)
+      (record-migration! 14)
+
+      ;; Now the cache table should have the json-ified version of
+      ;; each resource as the value
+      (is (= (map #(update-in % [:parameters] json/parse-string)
+                  (query-to-vec "SELECT * FROM resource_params_cache ORDER BY resource"))
+             [{:resource "1" :parameters {"ensure" "file"
+                                          "owner"  "root"
+                                          "group"  "root"}}
+              {:resource "2" :parameters {"random" "true"}}
+              ;; There should be no resource 3
+              {:resource "4" :parameters {"ensure"  "present"
+                                          "content" "#!/usr/bin/make\nall:\n\techo done\n"}}
+              {:resource "5" :parameters {"random" "false"}}
+              {:resource "6" :parameters {"multi" ["one" "two" "three"]}}
+              {:resource "7" :parameters {"hash" (sorted-map "foo" 5 "bar" 10)}}])))))

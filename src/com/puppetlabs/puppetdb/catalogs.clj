@@ -91,9 +91,9 @@
   (:require [clojure.string :as string]
             [clojure.tools.logging :as log]
             [clojure.set :as set]
-            [cheshire.core :as json]
+            [com.puppetlabs.cheshire :as json]
             [digest]
-            [com.puppetlabs.utils :as pl-utils])
+            [puppetlabs.kitchensink.core :as kitchensink])
   (:use [clojure.core.match :only [match]]))
 
 (def ^:const catalog-version
@@ -213,7 +213,7 @@
   [catalog]
   {:pre [(map? catalog)]
    :post [(= % catalog)]}
-  (let [present-keys (pl-utils/keyset catalog)
+  (let [present-keys (kitchensink/keyset catalog)
         extra-keys (set/difference present-keys catalog-attributes)
         missing-keys (set/difference catalog-attributes present-keys)]
     (when (seq extra-keys)
@@ -233,7 +233,7 @@
   [{:keys [metadata data] :as catalog}]
   {:pre [(map? metadata)
          (map? data)
-         (empty? (set/intersection (pl-utils/keyset metadata) (pl-utils/keyset data)))]
+         (empty? (set/intersection (kitchensink/keyset metadata) (kitchensink/keyset data)))]
    :post [(map? %)]}
   (merge metadata data))
 
@@ -274,13 +274,13 @@
   returning a PuppetDB-suitable representation."
   (fn [catalog version]
     (match [catalog version]
-           [(_ :when string?) _]
+           [(_ :guard string?) _]
            String
 
-           [(_ :when map?) (_ :when number?)]
+           [(_ :guard map?) (_ :guard number?)]
            version
 
-           [(_ :when map?) (_ :when (complement number?))]
+           [(_ :guard map?) (_ :guard (complement number?))]
            (throw (IllegalArgumentException. (format "Catalog version '%s' is not a legal version number" version)))
 
            ;; At this point, catalog can't be a string or a map (regardless of

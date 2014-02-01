@@ -7,8 +7,8 @@
   (:use [clj-time.coerce :only [to-timestamp]]
         [com.puppetlabs.validation :only [defmodel validate-against-model!]]
         [com.puppetlabs.puppetdb.command.constants :only [command-names]])
-  (:require [cheshire.core :as json]
-            [com.puppetlabs.utils :as utils]
+  (:require [com.puppetlabs.cheshire :as json]
+            [puppetlabs.kitchensink.core :as kitchensink]
             [clojure.string :as s]))
 
 (defmodel Report
@@ -22,6 +22,10 @@
    :transaction-uuid         { :optional? true
                                :type      :string }
    })
+
+(def report-fields
+  "Report fields"
+  (keys (:fields Report)))
 
 (defmodel ResourceEvent
   {:status             :string
@@ -44,11 +48,15 @@
                          :type      :coll }
    })
 
+(def resource-event-fields
+  "Resource event fields"
+  (keys (:fields ResourceEvent)))
+
 (def v2-new-event-fields [:file :line])
 
 (defn validate-and-add-v2-event-field!
   [event field]
-  {:pre [(utils/seq-contains? v2-new-event-fields field)]}
+  {:pre [(kitchensink/seq-contains? v2-new-event-fields field)]}
   (if (contains? event field)
     (throw (IllegalArgumentException.
              (format
@@ -87,3 +95,24 @@
                (format "Containment path should only contain strings: '%s'"
                        (resource-event :containment-path))))))
   report)
+
+(defn sanitize-events
+  "This function takes an array of events and santizes them, ensuring only
+   valid keys are returned."
+  [events]
+  {:pre [(coll? events)]
+   :post [(coll? %)]}
+  (let [valid-keys (map name resource-event-fields)]
+    (for [event events]
+      (select-keys event valid-keys))))
+
+(defn sanitize-report
+  "This function takes a report and sanitizes it, ensuring only valid data
+   is left over."
+  [payload]
+  {:pre [(map? payload)]
+   :post [(map? %)]}
+  (let [valid-keys (map name report-fields)]
+    (-> payload
+      (select-keys valid-keys)
+      (update-in ["resource-events"] sanitize-events))))
