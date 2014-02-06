@@ -10,9 +10,11 @@
         com.puppetlabs.puppetdb.examples.reports
         com.puppetlabs.puppetdb.fixtures
         [clj-time.core :only [ago now secs]]
-        [clj-time.coerce :only [to-string to-long]]
+        [clj-time.coerce :only [to-string to-long to-timestamp]]
         [com.puppetlabs.puppetdb.testutils :only (response-equal? assert-success! get-request paged-results)]
         [com.puppetlabs.puppetdb.testutils.reports :only (store-example-report! get-events-map)]))
+
+(def endpoint "/v3/events")
 
 (def content-type-json pl-http/json-response-content-type)
 
@@ -22,7 +24,7 @@
   ([query]
     (get-response query {}))
   ([query extra-query-params]
-    (*app* (get-request "/v3/events" query extra-query-params))))
+    (*app* (get-request endpoint query extra-query-params))))
 
 (defn munge-event-values
   "Munge the event values that we get back from the web to a format suitable
@@ -131,7 +133,7 @@
       (testing (str "should support paging through events " label " counts")
         (let [results (paged-results
                         {:app-fn  *app*
-                         :path    "/v3/events"
+                         :path    endpoint
                          :query   ["=" "report" report-hash]
                          :limit   1
                          :total   (count basic-events)
@@ -164,9 +166,54 @@
         basic3            (store-example-report! (:basic3 reports) (now))
         basic3-events     (get-in reports [:basic3 :resource-events])
         basic3-events-map (get-events-map (:basic3 reports))]
+
+    (testing "should return an error if the caller passes :distinct-resources without timestamps"
+      (let [response  (get-response ["=" "certname" "foo.local"] {:distinct-resources true})
+            body      (get response :body "null")]
+        (is (= (:status response) pl-http/status-bad-request))
+        (is (re-find
+              #"'distinct-resources' query parameter requires accompanying parameters 'distinct-start-time' and 'distinct-end-time'"
+              body)))
+      (let [response  (get-response ["=" "certname" "foo.local"] {:distinct-resources true
+                                                                  :distinct-start-time 0})
+            body      (get response :body "null")]
+        (is (= (:status response) pl-http/status-bad-request))
+        (is (re-find
+              #"'distinct-resources' query parameter requires accompanying parameters 'distinct-start-time' and 'distinct-end-time'"
+              body)))
+      (let [response  (get-response ["=" "certname" "foo.local"] {:distinct-resources true
+                                                                  :distinct-end-time 0})
+            body      (get response :body "null")]
+        (is (= (:status response) pl-http/status-bad-request))
+        (is (re-find
+              #"'distinct-resources' query parameter requires accompanying parameters 'distinct-start-time' and 'distinct-end-time'"
+              body))))
+
     (testing "should return only one event for a given resource"
       (let [expected  (expected-resource-events-response basic3-events basic3)
-            response  (get-response ["=", "certname", "foo.local"] {:distinct-resources true})]
+            response  (get-response ["=", "certname", "foo.local"] {:distinct-resources true
+                                                                    :distinct-start-time 0
+                                                                    :distinct-end-time (now)})]
+        (assert-success! response)
+        (response-equal? response expected munge-event-values)))
+
+    (testing "events should be contained within distinct resource timestamps"
+      (let [expected  (expected-resource-events-response basic-events basic)
+            response  (get-response ["=", "certname", "foo.local"]
+                                    {:distinct-resources true
+                                     :distinct-start-time 0
+                                     :distinct-end-time "2011-01-02T12:00:01-03:00"})]
+        (assert-success! response)
+        (response-equal? response expected munge-event-values)))
+
+    (testing "filters (such as status) should be applied *after* the distinct list of most recent events has been built up"
+      (let [expected  #{}
+            response (get-response ["and" ["=" "certname" "foo.local"]
+                                          ["=" "status" "success"]
+                                          ["=" "resource-title" "notify, yar"]]
+                                   {:distinct-resources true
+                                    :distinct-start-time 0
+                                    :distinct-end-time (now)})]
         (assert-success! response)
         (response-equal? response expected munge-event-values)))))
 
