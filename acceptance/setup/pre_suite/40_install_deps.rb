@@ -7,6 +7,10 @@ step "Install other dependencies on database" do
       case os
       when :debian
         # Install our JDK repository with a JDK 7 for Debian 6 and Ubuntu 10.04
+        # TODO: remove this
+        require 'pp'
+        pp db_facts
+        pp test_config
         if db_facts[:operatingsystemmajrelease] == "6" or
            db_facts[:operatingsystemrelease] == "10.04" then
 
