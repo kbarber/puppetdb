@@ -11,8 +11,8 @@ step "Install other dependencies on database" do
         require 'pp'
         pp db_facts
         pp test_config
-        if db_facts[:operatingsystemmajrelease] == "6" or
-           db_facts[:operatingsystemrelease] == "10.04" then
+        if db_facts["operatingsystemmajrelease"] == "6" or
+           db_facts["operatingsystemrelease"] == "10.04" then
 
           create_remote_file database, '/etc/apt/sources.list.d/jpkg.list', <<-REPO
 # Oracle JDK Packages
