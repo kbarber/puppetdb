@@ -1,25 +1,27 @@
 step "Install other dependencies on database" do
   os = test_config[:os_families][database.name]
-
-  case os
-  when :redhat, :fedora
-    # Our teardown script does some heinous magic with unzip to dig
-    # into the puppetdb jar.  Redhat doesn't ship with unzip.
-    on database, "yum install -y unzip"
-  when :debian
-    on database, "apt-get install -y unzip"
-  end
-
+  db_facts = facts(database.name)
 
   case test_config[:install_type]
     when :git
       case os
       when :debian
-        on database, "apt-get install -y --force-yes openjdk-6-jre-headless rake"
+        # Install our JDK repository with a JDK 7 for Debian 6 and Ubuntu 10.04
+        if db_facts[:operatingsystemmajrelease] == "6" or
+           db_facts[:operatingsystemrelease] == "10.04" then
+
+          create_remote_file database, '/etc/apt/sources.list.d/jpkg.list', <<-REPO
+# Oracle JDK Packages
+deb http://s3-us-west-2.amazonaws.com/puppetdb-jdk/jpkg/ pljdk main
+          REPO
+          on database, "apt-get update"
+        end
+
+        on database, "apt-get install -y --force-yes java-sdk rake unzip"
       when :redhat
-        on database, "yum install -y java-1.6.0-openjdk rubygem-rake"
+        on database, "yum install -y java-1.6.0-openjdk rubygem-rake unzip"
       when :fedora
-        on database, "yum install -y java-1.7.0-openjdk rubygem-rake"
+        on database, "yum install -y java-1.7.0-openjdk rubygem-rake unzip"
       else
         raise ArgumentError, "Unsupported OS '#{os}'"
       end
