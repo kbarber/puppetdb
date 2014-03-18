@@ -99,7 +99,6 @@ BuildRequires: unzip
 BuildRequires: sles-release
 Requires:      aaa_base
 Requires:      pwdutils
-Requires:      logrotate
 Requires:      procps
 %else
 BuildRequires: /usr/sbin/useradd
@@ -118,6 +117,7 @@ Requires:       chkconfig
 %endif
 BuildRequires: %{open_jdk}
 Requires:      %{open_jdk}
+Requires:      logrotate
 
 %description
 Puppet Centralized Storage.
