@@ -74,6 +74,8 @@
         com.puppetlabs.middleware
         [com.puppetlabs.jdbc :only (with-transacted-connection)]))
 
+(def version :v1)
+
 (defn munge-result-rows
   "Munge the result rows so that they will be compatible with the v1 API specification"
   [rows]
@@ -84,21 +86,18 @@
     rows))
 
 (defn produce-body
-  "Given a `limit`, a query, and database connection, return a Ring
+  "Given a query, and database connection, return a Ring
   response with the query results. The result format conforms to that documented
   above.
 
   If the query can't be parsed, a 400 is returned.
 
   If the query would return more than `limit` results, `status-internal-error` is returned."
-  [limit query db]
-  {:pre [(and (integer? limit) (>= limit 0))]}
+  [query db]
   (try
     (with-transacted-connection db
-      (-> query
-          (json/parse-string true)
-          (r/v1-query->sql)
-          ((partial r/limited-query-resources limit))
+      (-> (r/query->sql version (json/parse-string query true))
+          (r/query-resources)
           (:result)
           (munge-result-rows)
           (pl-http/json-response)))
@@ -114,7 +113,6 @@
     [""]
     {:get (fn [{:keys [params globals]}]
             (produce-body
-              (:resource-query-limit globals)
               (params "query")
               (:scf-read-db globals)))}))
 

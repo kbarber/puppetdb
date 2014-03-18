@@ -1,6 +1,6 @@
 %global realname puppetdb
-%global realversion <%= @version %>
-%global rpmversion <%= @rpmversion %>
+%global realversion <%= Pkg::Config.version %>
+%global rpmversion <%= Pkg::Config.rpmversion %>
 
 %define __jar_repack 0
 
@@ -58,8 +58,8 @@ Name:          pe-puppetdb
 <% else -%>
 Name:          puppetdb
 <% end -%>
-Version:       <%= @rpmversion %>
-Release:       <%= @rpmrelease %>%{?dist}
+Version:       <%= Pkg::Config.rpmversion %>
+Release:       <%= Pkg::Config.rpmrelease %>%{?dist}
 BuildRoot:     %{_tmppath}/%{realname}-%{version}-%{release}-root-%(%{__id_u} -n)
 
 Summary:       Puppet Centralized Storage Daemon
@@ -80,12 +80,12 @@ Group:         System Environment/Daemons
 %endif
 
 <% if @pe -%>
-BuildRequires: pe-facter >= 1.6.2, pe-puppet
+BuildRequires: pe-facter >= 1.7.0, pe-puppet
 BuildRequires: pe-rubygem-rake
 BuildRequires: pe-ruby
 Requires:      pe-puppet >= 2.7.12
 <% else -%>
-BuildRequires: facter >= 1.6.8
+BuildRequires: facter >= 1.7.0
 BuildRequires: puppet >= 2.7.12
 BuildRequires: rubygem-rake
 BuildRequires: ruby
@@ -154,6 +154,12 @@ export NO_BRP_CHECK_BYTECODE_VERSION=true
 
 rm -rf $RPM_BUILD_ROOT
 mkdir -p $RPM_BUILD_ROOT/%{_initddir}
+
+# Explicitly set environment variable LANG,
+# because otherwise it gets set to 'C' and that
+# is wrong, wrong, wrong. There may be a better
+# way to handle this, so this may change.
+export LANG=en_US.UTF-8
 
 <% if @pe -%>
 PATH=/opt/puppet/bin:$PATH rake install PARAMS_FILE= DESTDIR=$RPM_BUILD_ROOT PE_BUILD=true
@@ -294,10 +300,10 @@ fi
 %config(noreplace)%{_sysconfdir}/%{realname}/conf.d/jetty.ini
 %config(noreplace)%{_sysconfdir}/%{realname}/conf.d/repl.ini
 %config(noreplace)%{_realsysconfdir}/logrotate.d/%{name}
+%config(noreplace)%{_realsysconfdir}/sysconfig/%{name}
 %if 0%{?_with_systemd}
 %{_unitdir}/%{name}.service
 %else
-%config(noreplace)%{_realsysconfdir}/sysconfig/%{name}
 %{_initddir}/%{name}
 %endif
 %{_sbindir}/puppetdb-ssl-setup
@@ -312,6 +318,7 @@ fi
 %{_libexecdir}/%{realname}/puppetdb-import
 %{_libexecdir}/%{realname}/puppetdb-export
 %{_libexecdir}/%{realname}/puppetdb-anonymize
+%{_libexecdir}/%{realname}/%{name}.env
 %{_datadir}/%{realname}
 <% unless @pe -%>
 %{_sharedstatedir}/%{realname}
@@ -343,10 +350,10 @@ fi
 
 %changelog
 <%
-hostname = `hostname --fqdn`
-dt=`date +"%a %b %d %Y"`
+require 'socket'
+hostname = Socket.gethostname
 -%>
-* <%= dt.strip -%> <%= ENV['USER'] -%> <<%= ENV['USER'].strip -%>@<%= hostname.strip -%>> - <%= @rpmversion %>-<%= @rpmrelease -%>
+* <%= Time.now.strftime("%a %b %d %Y") %> <%= ENV['USER'] -%> <<%= ENV['USER'].strip -%>@<%= hostname -%>> - <%= Pkg::Config.rpmversion %>-<%= Pkg::Config.rpmrelease %>
 - Autobuild from Rake task
 
 * Mon Apr 02 2012 Michael Stahnke <stahnma@puppetlabs.com> - 0.1.0-1

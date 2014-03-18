@@ -4,12 +4,20 @@ After=syslog.target network.target
 
 [Service]
 Type=simple
+EnvironmentFile=/etc/sysconfig/<%= @name %>
 User=<%= @name %>
 PIDFile=/var/run/<%= @name %>/<%= @name %>.pid
-ExecStart=<%= @java_bin || "/usr/bin/java"  %> \
-          <%= @java_args || @default_java_args %> \
-          -jar <%= @install_dir || "/usr/share/puppetdb" %>/puppetdb.jar \
-          services -c <%= @config_dir %> $@
+<%- if @pe -%>
+ExecStart=<%= @java_bin %> \
+          $JAVA_ARGS \
+          -jar ${INSTALL_DIR}/puppetdb.jar \
+          services -c ${CONFIG} $@
+<%- else -%>
+ExecStart=/usr/lib/jvm/jre-1.7.0-openjdk/bin/java \
+          $JAVA_ARGS \
+          -jar ${INSTALL_DIR}/puppetdb.jar \
+          services -c ${CONFIG} $@
+<%- end -%>
 
 ExecStop=/bin/kill $MAINPID
 

@@ -1,56 +1,69 @@
 (ns com.puppetlabs.puppetdb.http.v3
-  (:use [com.puppetlabs.puppetdb.http.v3.command :only (command-app)]
-        [com.puppetlabs.puppetdb.http.v3.facts :only (facts-app)]
-        [com.puppetlabs.puppetdb.http.v3.fact-names :only (fact-names-app)]
-        [com.puppetlabs.puppetdb.http.v3.nodes :only (node-app)]
-        [com.puppetlabs.puppetdb.http.v3.resources :only (resources-app)]
-        [com.puppetlabs.puppetdb.http.v3.metrics :only (metrics-app)]
-        [com.puppetlabs.puppetdb.http.v3.version :only (version-app)]
-        [com.puppetlabs.puppetdb.http.v3.catalogs :only (catalog-app)]
-        [com.puppetlabs.puppetdb.http.v3.events :only (events-app)]
-        [com.puppetlabs.puppetdb.http.v3.reports :only (reports-app)]
-        [com.puppetlabs.puppetdb.http.v3.event-counts :only (event-counts-app)]
-        [com.puppetlabs.puppetdb.http.v3.aggregate-event-counts :only (aggregate-event-counts-app)]
-        [com.puppetlabs.puppetdb.http.v3.server-time :only (server-time-app)]
-        [net.cgrand.moustache :only (app)]))
+  (:require [com.puppetlabs.puppetdb.http.version :as ver]
+            [com.puppetlabs.puppetdb.http.command :as cmd]
+            [com.puppetlabs.puppetdb.http.metrics :as met]
+            [com.puppetlabs.puppetdb.http.server-time :as st]
+            [com.puppetlabs.puppetdb.http.aggregate-event-counts :as aec]
+            [com.puppetlabs.puppetdb.http.event-counts :as ec]
+            [com.puppetlabs.puppetdb.http.catalogs :as catalogs]
+            [com.puppetlabs.puppetdb.http.reports :as reports]
+            [com.puppetlabs.puppetdb.http.events :as events]
+            [com.puppetlabs.puppetdb.http.fact-names :as fact-names]
+            [com.puppetlabs.puppetdb.http.facts :as facts]
+            [com.puppetlabs.puppetdb.http.resources :as resources]
+            [com.puppetlabs.puppetdb.http.nodes :as nodes]
+            [net.cgrand.moustache :as moustache]))
+
+(def version :v3)
 
 (def v3-app
-  (app
-    ["commands" &]
-    {:any command-app}
+  (moustache/app
+   ["commands"]
+   {:any cmd/command}
 
-    ["facts" &]
-    {:any facts-app}
+   ["facts" &]
+   {:any (facts/facts-app version)}
 
-    ["fact-names" &]
-    {:any fact-names-app}
+   ["fact-names" &]
+   {:any (fact-names/fact-names-app version)}
 
-    ["nodes" &]
-    {:any node-app}
+   ["nodes" &]
+   {:any (nodes/node-app version)}
 
-    ["resources" &]
-    {:any resources-app}
+   ["resources" &]
+   {:any (resources/resources-app version)}
 
-    ["metrics" &]
-    {:any metrics-app}
+   ["metrics" &]
+   (moustache/app
+    ["mbeans"]
+    {:get met/list-mbeans}
 
-    ["version" &]
-    {:any version-app}
+    ["mbean" & names]
+    {:get (moustache/app
+           (met/mbean names))})
 
-    ["catalogs" &]
-    {:any catalog-app}
+   ["version" &]
+   (moustache/app
+    [""]
+    {:get ver/current-version}
 
-    ["events" &]
-    {:any events-app}
+    ["latest"]
+    {:get ver/latest-version})
 
-    ["event-counts" &]
-    {:any event-counts-app}
+   ["catalogs" &]
+   {:any (catalogs/catalog-app version)}
 
-    ["aggregate-event-counts" &]
-    {:any aggregate-event-counts-app}
+   ["events" &]
+   {:any (events/events-app version)}
 
-    ["reports" &]
-    {:any reports-app}
+   ["event-counts" &]
+   {:any (ec/event-counts-app version)}
 
-    ["server-time" &]
-    {:any server-time-app}))
+   ["aggregate-event-counts" &]
+   {:any (aec/aggregate-event-counts-app version)}
+
+   ["reports" &]
+   {:any reports/reports-app}
+
+   ["server-time" &]
+   {:any st/server-time-app}))
