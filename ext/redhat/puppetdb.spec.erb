@@ -99,7 +99,6 @@ BuildRequires: unzip
 BuildRequires: sles-release
 Requires:      aaa_base
 Requires:      pwdutils
-Requires:      logrotate
 Requires:      procps
 %else
 BuildRequires: /usr/sbin/useradd
@@ -118,6 +117,7 @@ Requires:       chkconfig
 %endif
 BuildRequires: %{open_jdk}
 Requires:      %{open_jdk}
+Requires:      logrotate
 
 %description
 Puppet Centralized Storage.
@@ -175,7 +175,7 @@ mkdir -p $RPM_BUILD_ROOT/%{_libexecdir}/%{name}
 touch  $RPM_BUILD_ROOT/%{_localstatedir}/log/%{name}/%{name}.log
 
 %if 0%{?fedora} >= 16 || 0%{?rhel} >= 7 || 0%{?sles_version} >= 12
-sed -i '/notifempty/a\    su puppetdb puppetdb' $RPM_BUILD_ROOT/%{_realsysconfdir}/logrotate.d/%{name}
+sed -i '/notifempty/a\    su %{name} %{name}' $RPM_BUILD_ROOT/%{_realsysconfdir}/logrotate.d/%{name}
 %endif
 
 %clean
