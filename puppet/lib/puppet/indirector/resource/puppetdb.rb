@@ -17,11 +17,15 @@ class Puppet::Resource::Puppetdb < Puppet::Indirector::REST
       host   = request.options[:host]
       filter = request.options[:filter]
       scope  = request.options[:scope]
+      environment = request.environment
 
       # At minimum, we want to filter to the right type of exported resources.
       expr = ['and',
                ['=', 'type', type],
                ['=', 'exported', true],
+               ['or',
+                 ['=', 'environment', environment],
+                 ['=', 'environment', nil]],
                ['not',
                  ['=', 'certname', host]]]
 
@@ -31,7 +35,7 @@ class Puppet::Resource::Puppetdb < Puppet::Indirector::REST
       query_param = CGI.escape(expr.to_json)
 
       begin
-        url = "/v3/resources?query=#{query_param}"
+        url = "/v4/resources?query=#{query_param}"
         response = profile "Resources query: #{URI.unescape(url)}" do
           http_get(request, url, headers)
         end
