@@ -194,15 +194,13 @@ if [ "$1" = "0" ]; then
 fi
 
 # If this is an upgrade (as opposed to an install) then we need to check
-#  and see if we stopped the service during the install (we indicate
-#  this via the existence of a temp file that was created during that
-#  phase).  If we did, then we need to restart it.
+# and restart the service if it is running.
 if [ "$1" = "1" ] ; then
 %if 0%{?_with_systemd}
-        /usr/bin/systemctl restart %{name}.service >/dev/null 2>&1 || :
+        /usr/bin/systemctl condrestart %{name}.service >/dev/null 2>&1 || :
 %endif
 %if 0%{?_with_sysvinit}
-        /sbin/service %{name} restart >/dev/null 2>&1 || :
+        /sbin/service %{name} status >/dev/null 2>&1 && /sbin/service %{name} restart >/dev/null 2>&1 || :
 %endif
 fi
 
