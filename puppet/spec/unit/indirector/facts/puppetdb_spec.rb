@@ -181,7 +181,7 @@ describe Puppet::Node::Facts::Puppetdb do
       response.stubs(:body).returns '[]'
 
       subject.expects(:http_get).with do |_,url,_|
-        url.should == "/v3/nodes?query=#{query}"
+        url.should == "/v4/nodes?query=#{query}"
       end.returns response
 
       search_facts(args)
@@ -197,7 +197,7 @@ describe Puppet::Node::Facts::Puppetdb do
       response.stubs(:body).returns '[]'
 
       subject.expects(:http_get).with do |_,url,_|
-        url.should == "/v3/nodes?query=#{query}"
+        url.should == "/v4/nodes?query=#{query}"
       end.returns response
 
       search_facts(args)
@@ -213,7 +213,7 @@ describe Puppet::Node::Facts::Puppetdb do
       response.stubs(:body).returns '[]'
 
       subject.expects(:http_get).with do |_,url,_|
-        url.should == "/v3/nodes?query=#{query}"
+        url.should == "/v4/nodes?query=#{query}"
       end.returns response
 
       search_facts(args)
@@ -235,7 +235,7 @@ describe Puppet::Node::Facts::Puppetdb do
         response.stubs(:body).returns '[]'
 
         subject.expects(:http_get).with do |_,url,_|
-          url.should == "/v3/nodes?query=#{query}"
+          url.should == "/v4/nodes?query=#{query}"
         end.returns response
 
         search_facts(args)

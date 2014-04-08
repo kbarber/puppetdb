@@ -20,6 +20,7 @@ test_name "facts should be available through facts terminus" do
         result = on master, "puppet facts find #{host.node_name} --terminus puppetdb"
         facts = JSON.parse(result.stdout.strip)
         assert_equal(host.node_name, facts['name'], "Failed to retrieve facts for '#{host.node_name}' via inventory service!")
+        assert_equal(facts['environment'], 'production', "Unable to retrieve environment for '#{host.node_name}' via inventory service!")
 
       end
     end

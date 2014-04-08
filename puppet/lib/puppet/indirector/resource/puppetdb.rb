@@ -17,15 +17,11 @@ class Puppet::Resource::Puppetdb < Puppet::Indirector::REST
       host   = request.options[:host]
       filter = request.options[:filter]
       scope  = request.options[:scope]
-      environment = request.environment
 
       # At minimum, we want to filter to the right type of exported resources.
       expr = ['and',
                ['=', 'type', type],
                ['=', 'exported', true],
-               ['or',
-                 ['=', 'environment', environment],
-                 ['=', 'environment', nil]],
                ['not',
                  ['=', 'certname', host]]]
 

@@ -81,7 +81,7 @@ describe Puppet::Resource::Puppetdb do
 
         subject.stubs(:http_get).with do |request, uri, headers|
           path, query_string = uri.split('?query=')
-          path == '/v3/resources' and JSON.load(CGI.unescape(query_string)) == query
+          path == '/v4/resources' and JSON.load(CGI.unescape(query_string)) == query
         end.returns response
       end
 
