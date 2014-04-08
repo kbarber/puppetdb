@@ -82,7 +82,7 @@ BuildRequires: /usr/sbin/useradd
 Requires:       systemd
 BuildRequires:  systemd
 %endif
-%if  0%{?_with_sysvinit}
+%if  0%{?_old_el}
 # Required for %%post and %%preun
 Requires:       chkconfig
 Requires:       initscripts
