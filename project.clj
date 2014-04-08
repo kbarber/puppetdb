@@ -63,7 +63,7 @@
                  [clj-http "0.5.3"]
                  [ring/ring-core "1.1.8"]
                  [ring/ring-jetty-adapter "1.1.8"]
-                 [org.apache.commons/commons-compress "1.4.1"]
+                 [org.apache.commons/commons-compress "1.8"]
                  [puppetlabs/kitchensink "0.1.1"]
                  [org.bouncycastle/bcpkix-jdk15on "1.49"]
                  [prismatic/schema "0.2.0"]
