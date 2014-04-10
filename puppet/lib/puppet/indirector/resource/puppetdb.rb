@@ -87,6 +87,8 @@ class Puppet::Resource::Puppetdb < Puppet::Indirector::REST
              ["=", "tag", value.downcase]
            when "title"
              ["=", "title", value]
+           when "catalog_environment"
+             ["=", "environment", value]
            else
              ["=", ['parameter', field], value]
            end
