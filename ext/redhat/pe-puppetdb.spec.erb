@@ -10,7 +10,7 @@
 %global _with_systemd  0
 %global _with_sysvinit 0
 
-# EL > 7 and SLES >= 12 use systemd
+# EL >= 7 and SLES >= 12 use systemd
 %if 0%{?rhel} >= 7 || 0%{?sles_version} >= 12
 %global _with_systemd 1
 %endif
@@ -153,8 +153,7 @@ useradd -r -g %{name} -d <%= @install_dir %> -s /sbin/nologin \
 %post
 export PATH=/opt/puppet/bin:$PATH
 %if 0%{?_with_systemd}
-# Always reload the .service files if using systemd, in case they have changed.
-/usr/bin/systemctl daemon-reload
+%systemd_post %{name}.service
 %endif
 %if 0%{?_with_sysvinit}
 # If this is an install (as opposed to an upgrade)...
@@ -172,11 +171,10 @@ fi
 %preun
 # If this is an uninstall (as opposed to an upgrade) then
 #  we want to shut down and disable the service.
-if [ "$1" = "0" ] ; then
 %if 0%{?_with_systemd}
-    /usr/bin/systemctl stop %{name}.service
-    /usr/bin/systemctl disable %{name}.service
+%systemd_preun %{name}.service
 %endif
+if [ "$1" = "0" ] ; then
 %if 0%{?_with_sysvinit}
     /sbin/service %{name} stop >/dev/null 2>&1
     /sbin/chkconfig --del %{name}
@@ -184,21 +182,17 @@ if [ "$1" = "0" ] ; then
 fi
 
 %postun
+%if 0%{?_with_systemd}
+%systemd_postun_with_restart %{name}.service
+%endif
 # Remove the rundir if this is an uninstall (as opposed to an upgrade)...
 if [ "$1" = "0" ]; then
     rm -rf %{_rundir}/%{name} || :
-%if 0%{?_with_systemd}
-    # Restart systemd after the service file is removed
-    /usr/bin/systemctl daemon-reload || :
-%endif
 fi
 
 # If this is an upgrade (as opposed to an install) then we need to check
 # and restart the service if it is running.
 if [ "$1" = "1" ] ; then
-%if 0%{?_with_systemd}
-        /usr/bin/systemctl condrestart %{name}.service >/dev/null 2>&1 || :
-%endif
 %if 0%{?_with_sysvinit}
         /sbin/service %{name} status >/dev/null 2>&1 && /sbin/service %{name} restart >/dev/null 2>&1 || :
 %endif
