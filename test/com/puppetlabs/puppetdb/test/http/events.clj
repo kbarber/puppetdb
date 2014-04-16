@@ -4,16 +4,18 @@
             [com.puppetlabs.http :as pl-http]
             [com.puppetlabs.puppetdb.scf.storage :as scf-store]
             [cheshire.core :as json]
-            [com.puppetlabs.puppetdb.testutils.events :refer [http-expected-resource-events]])
+            [com.puppetlabs.puppetdb.testutils.events :refer [http-expected-resource-events]]
+            [flatland.ordered.map :as omap]
+            [com.puppetlabs.puppetdb.examples :refer [catalogs]]
+            [clj-time.core :refer [ago now secs]]
+            [clj-time.coerce :refer [to-string to-long to-timestamp]]
+            [com.puppetlabs.puppetdb.testutils :refer [response-equal? assert-success! get-request paged-results]]
+            [com.puppetlabs.puppetdb.testutils.reports :refer [store-example-report! get-events-map]]
+            [clojure.walk :refer [stringify-keys]])
   (:use clojure.test
-        [clojure.walk :only [stringify-keys]]
         ring.mock.request
         com.puppetlabs.puppetdb.examples.reports
-        com.puppetlabs.puppetdb.fixtures
-        [clj-time.core :only [ago now secs]]
-        [clj-time.coerce :only [to-string to-long to-timestamp]]
-        [com.puppetlabs.puppetdb.testutils :only (response-equal? assert-success! get-request paged-results)]
-        [com.puppetlabs.puppetdb.testutils.reports :only (store-example-report! get-events-map)]))
+        com.puppetlabs.puppetdb.fixtures))
 
 (def v3-endpoint "/v3/events")
 (def v4-endpoint "/v4/events")
@@ -29,6 +31,25 @@
     (get-response endpoint query {}))
   ([endpoint query extra-query-params]
     (*app* (get-request endpoint query extra-query-params))))
+
+(defn parse-result
+  "Stringify (if needed) then parse the response"
+  [body]
+  (try
+    (if (string? body)
+      (json/parse-string body true)
+      (json/parse-string (slurp body) true))
+    (catch Throwable e
+      body)))
+
+(defn is-query-result
+  [endpoint query expected-results]
+  (let [request (get-request endpoint (json/generate-string query))
+        {:keys [status body]} (*app* request)
+        actual-result (parse-result body)]
+    (is (= (count actual-result) (count expected-results)))
+    (is (= (set actual-result) expected-results))
+    (is (= status pl-http/status-ok))))
 
 (defn munge-event-values
   "Munge the event values that we get back from the web to a format suitable
@@ -259,8 +280,96 @@
               (assert-success! response)
               (response-equal? response expected munge-event-values))))))))
 
+(def versioned-subqueries
+  (omap/ordered-map
+   "/v4/events"
+   (omap/ordered-map
+     ["and"
+       ["=" "containing-class" "Foo"]
+       ["in" "certname" ["extract" "certname" ["select-resources"
+                                                ["=" "title" "foobar"]]]]]
+
+     #{{:containment-path ["Foo" "" "Bar[Baz]"]
+        :new-value nil
+        :containing-class "Foo"
+        :report-receive-time "2014-04-16T12:44:40.978Z"
+        :report "e52935c051785ec6f3eeb67877aed320c90c2a88"
+        :resource-title "hi"
+        :property nil
+        :file "bar"
+        :old-value nil
+        :run-start-time "2011-01-01T15:00:00.000Z"
+        :line 2
+        :status "skipped"
+        :run-end-time "2011-01-01T15:10:00.000Z"
+        :resource-type "Notify"
+        :environment "DEV"
+        :timestamp "2011-01-01T15:00:02.000Z"
+        :configuration-version "a81jasj123"
+        :certname "basic.catalogs.com"
+        :message nil}}
+
+     ["and"
+       ["=" "containing-class" "Foo"]
+       ["in" "certname" ["extract" "certname" ["select-facts"
+                                                ["=" "value" "1.1.1.1"]]]]]
+
+     #{{:containment-path ["Foo" "" "Bar[Baz]"]
+        :new-value nil
+        :containing-class "Foo"
+        :report-receive-time "2014-04-16T12:44:40.978Z"
+        :report "e52935c051785ec6f3eeb67877aed320c90c2a88"
+        :resource-title "hi"
+        :property nil
+        :file "bar"
+        :old-value nil
+        :run-start-time "2011-01-01T15:00:00.000Z"
+        :line 2
+        :status "skipped"
+        :run-end-time "2011-01-01T15:10:00.000Z"
+        :resource-type "Notify"
+        :environment "DEV"
+        :timestamp "2011-01-01T15:00:02.000Z"
+        :configuration-version "a81jasj123"
+        :certname "basic.catalogs.com"
+        :message nil}})))
+
 (deftest valid-subqueries
   (doseq [[version endpoint] endpoints]
     (super-fixture
       (fn []
-        (testing (str "subqueries for endpoint: " endpoint ":"))))))
+        (let [catalog (:basic catalogs)
+              certname (str (:name catalog))
+              report (assoc (:basic reports) :certname certname)
+              timestamp "2014-04-16T12:44:40.978Z"]
+          (scf-store/add-certname! certname)
+          (store-example-report! report timestamp)
+          (scf-store/replace-catalog! catalog (now))
+          (scf-store/add-facts! certname {"ipaddress" "1.1.1.1"} (now) nil))
+        (doseq [[query results] (get versioned-subqueries endpoint)]
+          (testing (str "query: " query " should match expected output")
+            (is-query-result endpoint query results)))))))
+
+(def versioned-invalid-subqueries
+  (omap/ordered-map
+   "/v4/events" (omap/ordered-map
+                ;; Extract using an invalid field should throw an error
+                ["in" "certname" ["extract" "nothing" ["select-resources"
+                                                       ["=" "type" "Class"]]]]
+                "Can't extract unknown resource field 'nothing'. Acceptable fields are: catalog, certname, environment, exported, file, line, resource, tags, title, type"
+
+                ;; In-query for invalid fields should throw an error
+                ["in" "nothing" ["extract" "certname" ["select-resources"
+                                                       ["=" "type" "Class"]]]]
+                "Can't match on unknown event field 'nothing' for 'in'. Acceptable fields are: certname, configuration_version, containing_class, containment_path, end_time, file, line, message, name, new_value, old_value, property, receive_time, report, resource_title, resource_type, start_time, status, timestamp")))
+
+(deftest invalid-subqueries
+  (doseq [[version endpoint] endpoints]
+    (super-fixture
+      (fn []
+         (doseq [[query msg] (get versioned-invalid-subqueries endpoint)]
+           (testing (str "query: " query " should fail with msg: " msg)
+             (let [request (get-request endpoint (json/generate-string query))
+                   {:keys [status body] :as result} (*app* request)]
+               (is (= body msg))
+               (is (= status pl-http/status-bad-request)))))))))
