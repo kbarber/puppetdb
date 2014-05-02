@@ -36,7 +36,7 @@ describe processor do
 
       payload = {
         :command => Puppet::Util::Puppetdb::CommandNames::CommandStoreReport,
-        :version => 3,
+        :version => 4,
         :payload => subject.send(:report_to_hash),
       }.to_json
 
@@ -70,15 +70,8 @@ describe processor do
       subject.add_resource_status(status)
     end
 
-    it "should error on reports with no metrics" do
-      # at this point subject has no metrics
-      expect { subject.send(:report_to_hash) }.to raise_error(Puppet::Error)
-    end
-
     it "should include the transaction uuid or nil" do
       # Prevents subject.send(:report_to_hash) from exploding
-      subject.stubs(:run_duration).returns(-1)
-
       if subject.report_format >= 4
         subject.transaction_uuid = 'abc123'
         result = subject.send(:report_to_hash)
@@ -177,19 +170,9 @@ describe processor do
         end
 
         context "with no events" do
-          it "should include a fabricated event" do
+          it "should include have no events" do
             result = subject.send(:report_to_hash)
-            result["resource-events"].length.should == 1
-            event = result["resource-events"][0]
-            event["status"].should == "failure"
-            event["resource-type"].should == "Foo"
-            event["resource-title"].should == "foo"
-            event["property"].should be_nil
-            event["new-value"].should be_nil
-            event["old-value"].should be_nil
-            event["message"].should be_nil
-            event["file"].should == "foo"
-            event["line"].should == 1
+            result["resource-events"].length.should == 0
           end
         end
 
