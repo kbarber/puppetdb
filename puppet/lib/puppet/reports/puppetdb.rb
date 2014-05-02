@@ -57,6 +57,8 @@ Puppet::Reports.register_report(:puppetdb) do
         _, status = *status_entry
         if ! (status.events.empty?)
           events.concat(status.events.map { |event| event_to_hash(status, event) })
+        elsif status.skipped
+          events.concat([fabricate_event(status, "skipped")])
         end
         events
       end)
@@ -100,6 +102,26 @@ Puppet::Reports.register_report(:puppetdb) do
       "file"              => resource_status.file,
       "line"              => resource_status.line,
       "containment-path"  => resource_status.containment_path,
+    }
+  end
+
+  # Given an instance of `Puppet::Resource::Status` and a status
+  # string, this method fabricates a PuppetDB event object with the
+  # provided `"status"`.
+  #
+  # @api private
+  def fabricate_event(resource_status, event_status)
+    {
+      "status"            => event_status,
+      "timestamp"         => Puppet::Util::Puppetdb.to_wire_time(resource_status.time),
+      "resource-type"     => resource_status.resource_type,
+      "resource-title"    => resource_status.title,
+      "property"          => nil,
+      "new-value"         => nil,
+      "old-value"         => nil,
+      "message"           => nil,
+      "file"              => resource_status.file,
+      "line"              => resource_status.line,
     }
   end
 

@@ -111,9 +111,8 @@ describe processor do
           # client doesn't include one
           result.has_key?("report").should be_false
           result["certname"].should == subject.host
-          # TODO: change these two to use accessors as soon as we get up to puppet 3.0
-          result["puppet-version"].should == subject.instance_variable_get(:@puppet_version)
-          result["report-format"].should == subject.instance_variable_get(:@report_format)
+          result["puppet-version"].should == subject.puppet_version
+          result["report-format"].should == subject.report_format
           result["configuration-version"].should == subject.configuration_version.to_s
           result["resource-events"].should == []
         end
