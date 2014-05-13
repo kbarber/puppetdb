@@ -36,6 +36,9 @@ end
   Rake::Task[task].clear if Rake::Task.task_defined?(task)
 end
 
+@pe = TRUE
+ENV['PATH'] = "/opt/puppet/bin:" + ENV['PATH']
+
 # We establish variables used in the puppetdb tasks before hand
 if defined?(Pkg) and defined?(Pkg::Config)
   if @pe = Pkg::Config.build_pe
