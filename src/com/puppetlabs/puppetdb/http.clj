@@ -1,6 +1,6 @@
 (ns com.puppetlabs.puppetdb.http
-  (:require [ring.util.response :as rr])
-  (:use [com.puppetlabs.http :only [json-response]]))
+  (:require [ring.util.response :as rr]
+            [com.puppetlabs.http :refer [json-response]]))
 
 (def header-map
   "Maps the legal keys from a puppetdb query response object to the
@@ -37,17 +37,12 @@
     (json-response (:result query-result))
     (add-headers (dissoc query-result :result))))
 
-(defn remove-environment
-  "dissocs the :environment key when the version is :v4"
+(defn remove-status
+  "Status is only for the v4 version of the reports response"
   [result-map version]
   (if-not (= :v4 version)
-    (dissoc result-map :environment)
+    (dissoc result-map :status)
     result-map))
-
-(defn remove-all-environments
-  "Removes environment from a seq of results"
-  [version rows]
-  (map #(remove-environment % version) rows))
 
 (defn v4?
   "Returns a function that always returns true if `version` is :v4"

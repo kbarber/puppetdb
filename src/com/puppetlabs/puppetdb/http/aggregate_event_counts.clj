@@ -2,10 +2,10 @@
   (:require [com.puppetlabs.http :as pl-http]
             [com.puppetlabs.puppetdb.query.aggregate-event-counts :as aggregate-event-counts]
             [com.puppetlabs.cheshire :as json]
-            [com.puppetlabs.puppetdb.http.events :as events-http])
-  (:use     [com.puppetlabs.jdbc :only (with-transacted-connection)]
-            [com.puppetlabs.middleware :only [verify-accepts-json validate-query-params]]
-            [net.cgrand.moustache :only [app]]))
+            [com.puppetlabs.puppetdb.http.events :as events-http]
+            [com.puppetlabs.jdbc :refer [with-transacted-connection]]
+            [com.puppetlabs.middleware :refer [verify-accepts-json validate-query-params]]
+            [net.cgrand.moustache :refer [app]]))
 
 (defn produce-body
   "Given a database connection, a query, a value to summarize by, and optionally
@@ -19,7 +19,7 @@
          ((some-fn nil? string?) counts-filter)
          ((some-fn nil? string?) count-by)]}
   (try
-    (let [query               (json/parse-string query true)
+    (let [query               (json/parse-strict-string query true)
           counts-filter       (if counts-filter (json/parse-string counts-filter true))
           distinct-options    (events-http/validate-distinct-options! query-params)]
       (with-transacted-connection db

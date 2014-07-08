@@ -4,25 +4,27 @@
             [com.puppetlabs.puppetdb.scf.storage :as scf-store]
             [puppetlabs.kitchensink.core :as kitchensink]
             [com.puppetlabs.http :as pl-http]
-            [flatland.ordered.map :as omap])
-  (:import [com.fasterxml.jackson.core JsonParseException])
-  (:use clojure.test
-        ring.mock.request
-        [clj-time.core :only [now]]
-        [com.puppetlabs.puppetdb.fixtures]
-        [com.puppetlabs.puppetdb.testutils :only [assert-success! get-request]]
-        [com.puppetlabs.puppetdb.examples]))
-
+            [flatland.ordered.map :as omap]
+            [clojure.test :refer :all]
+            [ring.mock.request :refer :all]
+            [clj-time.core :refer [now]]
+            [com.puppetlabs.puppetdb.fixtures :refer :all]
+            [com.puppetlabs.puppetdb.testutils :refer [assert-success! get-request]]
+            [com.puppetlabs.puppetdb.examples :refer :all])
+  (:import [com.fasterxml.jackson.core JsonParseException]))
 
 (use-fixtures :each with-test-db with-http-app)
 
 (def c-t pl-http/json-response-content-type)
 
 (defn get-versioned-response
-  ([version route] (let [resp (*app* (get-request (str "/" (name version) "/" route) nil {} {"Accept" c-t}))]
-             (if (string? (:body resp))
-               resp
-               (update-in resp [:body] slurp)))))
+  [version route]
+  (let [endpoint (str "/" (name version) "/" route)
+        resp (*app*
+              (get-request endpoint nil {} {"Accept" c-t}))]
+    (if (string? (:body resp))
+      resp
+      (update-in resp [:body] slurp))))
 
 (def versions
   (omap/ordered-map
@@ -74,18 +76,20 @@
       (testing "/nodes should return all active nodes"
         (check-json-response
          nodes response (get-response "nodes")
-         (is (= (set (mapv :name nodes)) #{"host1" "host2"}))))
+         (case version
+           (:v2 :v3) (is (= (set (mapv :name nodes)) #{"host1" "host2"}))
+           (is (= (set (mapv :certname nodes)) #{"host1" "host2"})))))
 
       (testing "/nodes/<node> should return status info"
         (doseq [host ["host1" "host2"]]
           (check-json-response
            status response (get-response (str "nodes/" host))
-           (is (= host (:name status)))
+           (is (= host ((case version (:v2 :v3) :name :certname) status)))
            (is (nil? (:deactivated status)))))
         ;; host3 should be deactivated
         (check-json-response
          status response (get-response "nodes/host3")
-         (is (= "host3" (:name status)))
+         (is (= "host3" ((case version (:v2 :v3) :name :certname) status)))
          (is (:deactivated status))))
 
       (testing "/nodes/<node> should return a 404 for unknown nodes"

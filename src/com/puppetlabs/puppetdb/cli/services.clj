@@ -57,7 +57,8 @@
             [com.puppetlabs.puppetdb.config :as conf]
             [com.puppetlabs.puppetdb.utils :as utils]
             [puppetlabs.kitchensink.core :as kitchensink]
-            [puppetlabs.trapperkeeper.core :refer [defservice main]])
+            [puppetlabs.trapperkeeper.core :refer [defservice main]]
+            [compojure.core :as compojure])
   (:use [clojure.java.io :only [file]]
         [clj-time.core :only [ago secs minutes days]]
         [overtone.at-at :only (mk-pool interspaced)]
@@ -242,6 +243,10 @@
 
   (shutdown-mq-broker context))
 
+(defn add-max-framesize
+  "Add a maxFrameSize to broker url for activemq."
+  [config url]
+  (format "%s&wireFormat.maxFrameSize=%s&marshal=true" url (:max-frame-size config)))
 
 (defn start-puppetdb
   [context config service-id add-ring-handler shutdown-on-error]
@@ -255,8 +260,7 @@
          :as config}                            (conf/process-config! config)
         product-name                               (:product-name global)
         update-server                              (:update-server global)
-        ;; TODO: revisit the choice of 20000 as a default value for event queries
-        event-query-limit                          (:event-query-limit global)
+        url-prefix                                 (:url-prefix global)
         write-db                                   (pl-jdbc/pooled-datasource database)
         read-db                                    (pl-jdbc/pooled-datasource (assoc read-database :read-only? true))
         gc-interval                                (get database :gc-interval)
@@ -268,11 +272,11 @@
         discard-dir                                (file mq-dir "discarded")
         globals                                    {:scf-read-db          read-db
                                                     :scf-write-db         write-db
-                                                    :command-mq           {:connection-string mq-addr
+                                                    :command-mq           {:connection-string (add-max-framesize command-processing mq-addr)
                                                                            :endpoint          mq-endpoint}
-                                                    :event-query-limit    event-query-limit
                                                     :update-server        update-server
-                                                    :product-name         product-name}]
+                                                    :product-name         product-name
+                                                    :url-prefix           url-prefix}]
 
     (when (version)
       (log/info (format "PuppetDB version %s" (version))))
@@ -319,7 +323,7 @@
                                       (constantly true))
                         app (server/build-app :globals globals :authorized? authorized?)]
                     (log/info "Starting query server")
-                    (add-ring-handler app ""))
+                    (add-ring-handler (compojure/context url-prefix [] app) url-prefix))
           job-pool (mk-pool)]
 
       ;; Pretty much this helper just knows our job-pool and gc-interval

@@ -1,5 +1,5 @@
 ---
-title: "PuppetDB 2.0 » API » v4 » Querying Reports"
+title: "PuppetDB 2.1 » API » v4 » Querying Reports"
 layout: default
 canonical: "/puppetdb/latest/api/query/v4/reports.html"
 ---
@@ -8,6 +8,7 @@ canonical: "/puppetdb/latest/api/query/v4/reports.html"
 [operator]: ../v4/operators.html
 [event]: ./events.html
 [paging]: ./paging.html
+[statuses]: /puppet/latest/reference/format_report.html#puppettransactionreport
 
 Querying reports is accomplished by making an HTTP request to the `/reports` REST
 endpoint.
@@ -29,11 +30,11 @@ JSON query structure would be:
 
 ##### Operators
 
-The only available [OPERATOR][] is `=`.
+See [the Operators page](./operators.html)
 
 ##### Fields
 
-`FIELD` may be any of the following.  All fields support only the equality operator.
+`FIELD` may be any of the following:
 
 `certname`
 : the name of the node that the report was received from.
@@ -44,6 +45,30 @@ The only available [OPERATOR][] is `=`.
 
 `environment`
 : the environment associated to report's node
+
+`status`
+: the status associated to report's node, possible values for this field come from Puppet's report status which can be found [here][statuses]
+
+`puppet-version`
+: the version of puppet that generated the report
+
+`report-format`
+: the version number of the report format that puppet used to generate the original report data
+
+`configuration-version`
+: an identifier string that puppet uses to match a specific catalog for a node to a specific puppet run
+
+`start-time`
+: is the time at which the puppet run began
+
+`end-time`
+: is the time at which the puppet run ended
+
+`receive-time`
+: is the time at which puppetdb recieved the report
+
+`transaction-uuid`
+: string used to identify a puppet run
 
 #### Response format
 
@@ -61,7 +86,9 @@ the completion time of the report, in descending order:
         "hash": "bd899b1ee825ec1d2c671fe5541b5c8f4a783472",
         "certname": "foo.local",
         "report-format": 4,
-        "transaction-uuid": "030c1717-f175-4644-b048-ac9ea328f221"
+        "transaction-uuid": "030c1717-f175-4644-b048-ac9ea328f221",
+        "environment": "DEV",
+        "status": "unchanged"
         },
       {
         "end-time": "2012-10-26T22:39:32.000Z",
@@ -73,6 +100,8 @@ the completion time of the report, in descending order:
         "certname": "foo.local",
         "report-format": 4,
         "transaction-uuid": null
+        "environment": "DEV",
+        "status": "unchanged"
         }
     ]
 

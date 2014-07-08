@@ -101,7 +101,12 @@ else
       end
     @link = "/usr/share/puppetdb"
     @name = "puppetdb"
-    @sbin_dir = "/usr/sbin"
+    @sbin_dir = case @osfamily
+      when /archlinux/
+        "/usr/bin"
+      else
+        "/usr/sbin"
+      end
 end
 
 @initscriptname = "/etc/init.d/#{@name}"

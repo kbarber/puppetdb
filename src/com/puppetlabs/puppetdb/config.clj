@@ -4,7 +4,8 @@
 
    The schemas in this file define what is expected to be present in the INI file
    and the format expected by the rest of the application."
-  (:import [java.security KeyStore])
+  (:import [java.security KeyStore]
+           [org.joda.time Minutes Days Period])
   (:require [clojure.tools.logging :as log]
             [puppetlabs.kitchensink.ssl :as ssl]
             [puppetlabs.kitchensink.core :as kitchensink]
@@ -35,6 +36,7 @@
    (s/optional-key :subprotocol) (s/maybe String)
    (s/optional-key :subname) (s/maybe String)
    (s/optional-key :username) String
+   (s/optional-key :user) String
    (s/optional-key :password) String
    (s/optional-key :syntax_pgs) String
    (s/optional-key :read-only?) (pls/defaulted-maybe String "false")
@@ -51,7 +53,7 @@
          {(s/optional-key :gc-interval) (pls/defaulted-maybe s/Int 60)
           (s/optional-key :report-ttl) (pls/defaulted-maybe String "14d")
           (s/optional-key :node-purge-ttl) (pls/defaulted-maybe String "0s")
-          (s/optional-key :node-ttl) (s/maybe String)
+          (s/optional-key :node-ttl) String
           (s/optional-key :node-ttl-days) (s/maybe s/Int)}))
 
 (def database-config-out
@@ -59,28 +61,29 @@
   {:classname String
    :subprotocol String
    :subname String
-   :log-slow-statements pls/Days
-   :conn-max-age pls/Minutes
-   :conn-keep-alive pls/Minutes
-   :read-only? pls/SchemaBoolean
+   :log-slow-statements Days
+   :conn-max-age Minutes
+   :conn-keep-alive Minutes
+   :read-only? Boolean
    :partition-conn-min s/Int
    :partition-conn-max s/Int
    :partition-count s/Int
-   :stats pls/SchemaBoolean
-   :log-statements pls/SchemaBoolean
+   :stats Boolean
+   :log-statements Boolean
    :statements-cache-size s/Int
-   (s/optional-key :conn-lifetime) (s/maybe pls/Minutes)
+   (s/optional-key :conn-lifetime) (s/maybe Minutes)
    (s/optional-key :username) String
+   (s/optional-key :user) String
    (s/optional-key :password) String
    (s/optional-key :syntax_pgs) String})
 
 (def write-database-config-out
   "Schema for parsed/processed database config that includes write database params"
   (merge database-config-out
-         {:gc-interval pls/Minutes
-          :report-ttl pls/Period
-          :node-purge-ttl pls/Period
-          :node-ttl (s/either pls/Period pls/Days)}))
+         {:gc-interval Minutes
+          :report-ttl Period
+          :node-purge-ttl Period
+          (s/optional-key :node-ttl) (s/either Period Days)}))
 
 (defn half-the-cores*
   "Function for computing half the cores of the system, useful
@@ -101,17 +104,19 @@
   {(s/optional-key :dlo-compression-threshold) (pls/defaulted-maybe String "1d")
    (s/optional-key :threads) (pls/defaulted-maybe s/Int half-the-cores)
    (s/optional-key :store-usage) s/Int
+   (s/optional-key :max-frame-size) (pls/defaulted-maybe String "209715200")
    (s/optional-key :temp-usage) s/Int})
 
 (def command-processing-out
   "Schema for parsed/processed command processing config - currently incomplete"
-  {:dlo-compression-threshold pls/Period
+  {:dlo-compression-threshold Period
    :threads s/Int
+   :max-frame-size s/Str
    (s/optional-key :store-usage) s/Int
    (s/optional-key :temp-usage) s/Int})
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;; Database config 
+;;; Database config
 
 (defn maybe-days
   "Convert the non-nil integer to days"
@@ -159,17 +164,19 @@
   "Assoc into `db-config` a :node-ttl when not already present. Default to node-ttl-days, if that's not there,
    use 0 seconds"
   [db-config]
-  (if (:node-ttl db-config)
-    db-config
-    (assoc db-config :node-ttl (or (maybe-days (:node-ttl-days db-config))
-                                   (pl-time/parse-period "0s")))))
+  (dissoc (if (:node-ttl db-config)
+            db-config
+            (-> db-config
+                (assoc :node-ttl (or (maybe-days (:node-ttl-days db-config))
+                                     (pl-time/parse-period "0s")))  ))
+          :node-ttl-days))
 
 (defn convert-write-db-config
   "Converts the `database` config using the write database config schema. Also defaults
    the node-ttl parameter."
   [global database]
-  (->> (convert-db-config write-database-config-in write-database-config-out global database)
-       default-node-ttl
+  (->> (default-node-ttl database)
+       (convert-db-config write-database-config-in write-database-config-out global)
        (pls/strip-unknown-keys write-database-config-out)))
 
 (defn configure-write-db
@@ -292,16 +299,26 @@
                (format "product-name %s is illegal; either puppetdb or pe-puppetdb are allowed" product-name))))
     lower-product-name))
 
+(defn normalize-url-prefix
+  [url-prefix]
+  (cond
+    (empty? url-prefix) url-prefix
+    (.startsWith url-prefix "/") url-prefix
+    :else (str "/" url-prefix)))
+
 (defn configure-globals
   "Configures the global properties from the user defined config"
   [{:keys [global] :as config}]
-  (let [product-name (normalize-product-name (get global :product-name "puppetdb"))]
+  (let [product-name (normalize-product-name (get global :product-name "puppetdb"))
+        url-prefix   (normalize-url-prefix (get global :url-prefix ""))]
+    (when (:event-query-limit global)
+      (log/warn "The configuration item `event-query-limit` in the [global] section is deprecated and now ignored. It will be removed in the future."))
     (update-in config [:global]
                (fn [global-config]
                  (-> global-config
                      (assoc :product-name product-name)
-                     (utils/assoc-when :event-query-limit 20000
-                                       :update-server "http://updates.puppetlabs.com/check-for-updates"))))))
+                     (assoc :url-prefix url-prefix)
+                     (utils/assoc-when :update-server "http://updates.puppetlabs.com/check-for-updates"))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Public

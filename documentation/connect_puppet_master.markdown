@@ -1,5 +1,5 @@
 ---
-title: "PuppetDB 2.0 » Connecting Puppet Masters to PuppetDB"
+title: "PuppetDB 2.1 » Connecting Puppet Masters to PuppetDB"
 layout: default
 canonical: "/puppetdb/latest/connect_puppet_master.html"
 ---
@@ -14,13 +14,14 @@ canonical: "/puppetdb/latest/connect_puppet_master.html"
 [report]: ./api/query/v3/report.html
 [store_report]: ./api/commands.html#store-report-version-1
 [report_format]: ./api/wire_format/report_format_v3.html
+[url_prefix_setting]: ./configure.html#url-prefix
 
 > Note: To use PuppetDB, your site's puppet master(s) must be running Puppet 3.5.1 or later .
 
-After PuppetDB is installed and running, you should configure your puppet master(s) to use it. Once connected to PuppetDB, puppet masters will do the following: 
+After PuppetDB is installed and running, you should configure your puppet master(s) to use it. Once connected to PuppetDB, puppet masters will do the following:
 
 * Send every node's catalog to PuppetDB
-* Send every node's facts to PuppetDB 
+* Send every node's facts to PuppetDB
 * Query PuppetDB when compiling node catalogs that collect [exported resources][exported]
 * Query PuppetDB when responding to [inventory service](/guides/inventory_service.html) requests
 
@@ -30,7 +31,7 @@ After PuppetDB is installed and running, you should configure your puppet master
 
 ## Step 1: Install Plugins
 
-Currently, puppet masters need additional Ruby plugins in order to use PuppetDB. Unlike custom facts or functions, these cannot be loaded from a module and must be installed in Puppet's main source directory. 
+Currently, puppet masters need additional Ruby plugins in order to use PuppetDB. Unlike custom facts or functions, these cannot be loaded from a module and must be installed in Puppet's main source directory.
 
 ### On Platforms With Packages
 
@@ -49,7 +50,7 @@ If your puppet master isn't running Puppet from a supported package, you will ne
 
 ### Locate Puppet's Config Directory
 
-Find your puppet master's config directory by running `sudo puppet config print confdir`. It will usually be at either `/etc/puppet/` or `/etc/puppetlabs/puppet/`. 
+Find your puppet master's config directory by running `sudo puppet config print confdir`. It will usually be at either `/etc/puppet/` or `/etc/puppetlabs/puppet/`.
 
 You will need to edit (or create) three files in this directory:
 
@@ -65,6 +66,8 @@ PuppetDB's port for secure traffic defaults to 8081. Puppet _requires_ use of Pu
 
 For availability reasons there is a setting named `soft_write_failure` that will cause the PuppetDB terminus to fail in a soft-manner if PuppetDB is not accessable for command submission. This will mean that users who are either not using storeconfigs, or only exporting resources will still have their catalogs compile during a PuppetDB outage.
 
+You may also, optionally, specify a setting named `url_prefix` if you have configured your PuppetDB server to run the web application at a URL other than "/".  This should not be necessary in most cases, and should only be used if you have modified the corresponding [`url-prefix` setting in your PuppetDB configuration][url_prefix_setting].
+
 If no puppetdb.conf file exists, the following default values will be used:
 
     server = puppetdb
@@ -79,7 +82,7 @@ To enable PuppetDB for the inventory service and saved catalogs/exported resourc
       storeconfigs = true
       storeconfigs_backend = puppetdb
 
-> Note: The `thin_storeconfigs` and `async_storeconfigs` settings should be absent or set to `false`. If you have previously used the puppet queue daemon (puppetqd), you should now disable it. 
+> Note: The `thin_storeconfigs` and `async_storeconfigs` settings should be absent or set to `false`. If you have previously used the puppet queue daemon (puppetqd), you should now disable it.
 
 #### Enabling report storage
 

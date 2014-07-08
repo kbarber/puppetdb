@@ -8,19 +8,20 @@
             [com.puppetlabs.puppetdb.scf.hash :as shash]
             [puppetlabs.trapperkeeper.testutils.logging :refer [atom-logger]]
             [clj-time.format :as tfmt]
-            [clojure.walk :as walk])
-  (:use [com.puppetlabs.puppetdb.command]
-        [com.puppetlabs.puppetdb.testutils]
-        [com.puppetlabs.puppetdb.fixtures]
-        [com.puppetlabs.jdbc :only [query-to-vec]]
-        [com.puppetlabs.puppetdb.examples]
-        [com.puppetlabs.puppetdb.testutils.reports :only [munge-example-report-for-storage]]
-        [com.puppetlabs.puppetdb.command.constants :only [command-names]]
-        [clj-time.coerce :only [to-timestamp]]
-        [clj-time.core :only [days ago now]]
-        [clojure.test]
-        [clojure.tools.logging :only [*logger-factory*]]
-        [slingshot.slingshot :only [try+ throw+]]))
+            [clojure.walk :as walk]
+            [com.puppetlabs.puppetdb.query :refer [remove-environment]]
+            [com.puppetlabs.puppetdb.command :refer :all]
+            [com.puppetlabs.puppetdb.testutils :refer :all]
+            [com.puppetlabs.puppetdb.fixtures :refer :all]
+            [com.puppetlabs.jdbc :refer [query-to-vec]]
+            [com.puppetlabs.puppetdb.examples :refer :all]
+            [com.puppetlabs.puppetdb.testutils.reports :refer [munge-example-report-for-storage]]
+            [com.puppetlabs.puppetdb.command.constants :refer [command-names]]
+            [clj-time.coerce :refer [to-timestamp]]
+            [clj-time.core :refer [days ago now]]
+            [clojure.test :refer :all]
+            [clojure.tools.logging :refer [*logger-factory*]]
+            [slingshot.slingshot :refer [try+ throw+]]))
 
 (use-fixtures :each with-test-db)
 
@@ -353,27 +354,6 @@
    JSON structure"
   [catalog]
   (update-in catalog [:payload] json/generate-string))
-
-(defmacro wrap-with-testing
-  "If `version` is bound in this context, wrap the form in a testing
-   macro to indicate the version being tested"
-  [body]
-  `(if ~(contains? &env 'version)
-     (testing (str "Testing version " ~'version)
-       ~@body)
-     (do ~@body)))
-
-(defmacro doverseq
-  "Loose wrapper around `doseq` to support testing multiple versions of commands. Will run
-   the test fixtures around each tested version and if `version` is chosen as the let bound
-   variable to hold the current version being tested, with wrap it in a (testing...) block
-   indicating the version being tested"
-  [seq-exprs & body]
-  `(let [each-fixture# (join-fixtures (:clojure.test/each-fixtures (meta ~*ns*)))]
-     (doseq ~seq-exprs
-       (each-fixture#
-         (fn []
-           (wrap-with-testing ~body))))))
 
 (defn with-env
   "Returns a function that will update the `row-map` to include
@@ -1072,7 +1052,7 @@
    default-report-munging if a munge function has not been specified"
   (munge-command default-report-munging))
 
-(let [report (munge-example-report-for-storage (report-examples/dissoc-env (:basic report-examples/reports)))
+(let [report (munge-example-report-for-storage (remove-environment (:basic report-examples/reports) :v2))
       v2-command {:command (command-names :store-report)
                   :version 2
                   :payload report}]

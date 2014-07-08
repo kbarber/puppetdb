@@ -3,16 +3,19 @@
             [com.puppetlabs.puppetdb.reports :as report]
             [com.puppetlabs.puppetdb.query :as query]
             [com.puppetlabs.puppetdb.query.events :as event-query]
-            [puppetlabs.kitchensink.core :as kitchensink])
-  (:use clojure.test
-         com.puppetlabs.puppetdb.fixtures
-         com.puppetlabs.puppetdb.examples.reports
-         [com.puppetlabs.puppetdb.testutils.reports :only [store-example-report! get-events-map]]
-         com.puppetlabs.puppetdb.testutils.events
-         [clj-time.coerce :only [to-string to-timestamp to-long]]
-         [clj-time.core :only [now ago days]]))
+            [puppetlabs.kitchensink.core :as kitchensink]
+            [clojure.test :refer :all]
+            [com.puppetlabs.puppetdb.fixtures :refer :all]
+            [com.puppetlabs.puppetdb.examples.reports :refer :all]
+            [com.puppetlabs.puppetdb.testutils.reports :refer [store-example-report! get-events-map]]
+            [com.puppetlabs.puppetdb.testutils.events :refer :all]
+            [com.puppetlabs.puppetdb.testutils :refer [deftestseq]]
+            [clj-time.coerce :refer [to-string to-timestamp to-long]]
+            [clj-time.core :refer [now ago days]]))
 
 (use-fixtures :each with-test-db)
+
+(def versions [:v2 :v3 :v4])
 
 ;; Begin tests
 
@@ -50,6 +53,11 @@
         (is (thrown-with-msg?
              IllegalArgumentException #"> operator does not support object 'resource_type'"
              (query/compile-term ops [">" "resource_type" "foo"])))))))
+
+(defmacro after-v3 [version v3-or-before v4-or-after]
+  `(if (contains? #{:v2 :v3} ~version)
+    ~v3-or-before
+    ~v4-or-after))
 
 (deftest resource-event-queries
   (let [basic             (store-example-report! (:basic reports) (now))
@@ -105,16 +113,6 @@
                               ["<=" "timestamp" end-time]])]
             (is (= actual expected)))))
 
-      (testing "when querying with a limit"
-        (let [num-events (count basic-events)]
-          (testing "should succeed if the number of returned events is less than the limit"
-            (is (= num-events
-                   (count (resource-events-limited-query-result version (inc num-events) ["=" "report" report-hash])))))
-          (testing "should fail if the number of returned events would exceed the limit"
-            (is (thrown-with-msg?
-                 IllegalStateException #"Query returns more than the maximum number of results"
-                 (resource-events-limited-query-result version (dec num-events) ["=" "report" report-hash]))))))
-
       (testing "equality queries"
         (doseq [[field value matches]
                 [[:resource-type    "Notify"                            [1 2 3]]
@@ -146,27 +144,41 @@
               (is (= actual expected)
                   (format "Results didn't match for query '%s'" query))))))
 
-      (testing "'not' queries"
+      (testing (str "'not' queries for " version)
         (doseq [[field value matches]
                 [[:resource-type    "Notify"                            []]
                  [:resource-title   "notify, yo"                        [2 3]]
                  [:status           "success"                           [3]]
-                 [:property         "message"                           [3]]
+                 [:property         "message"                           (after-v3 version
+                                                                                  [3]
+                                                                                  [])]
                  [:property         nil                                 [1 2]]
                  [:old-value        ["what" "the" "woah"]               [2 3]]
                  [:new-value        "notify, yo"                        [2 3]]
-                 [:message          "defined 'message' as 'notify, yo'" [3]]
+                 [:message          "defined 'message' as 'notify, yo'" (after-v3 version
+                                                                                  [3]
+                                                                                  [])]
                  [:message          nil                                 [1 2]]
                  [:resource-title   "bunk"                              [1 2 3]]
                  [:certname         "foo.local"                         []]
                  [:certname         "bunk.remote"                       [1 2 3]]
-                 [:file             "foo.pp"                            [2 3]]
-                 [:file             "bar"                               [1 2]]
+                 [:file             "foo.pp"                            (after-v3 version
+                                                                                  [2 3]
+                                                                                  [3])]
+                 [:file             "bar"                               (after-v3 version
+                                                                                  [1 2]
+                                                                                  [1])]
                  [:file             nil                                 [1 3]]
-                 [:line             1                                   [2 3]]
-                 [:line             2                                   [1 2]]
+                 [:line             1                                   (after-v3 version
+                                                                                  [2 3]
+                                                                                  [3])]
+                 [:line             2                                   (after-v3 version
+                                                                                  [1 2]
+                                                                                  [1])]
                  [:line             nil                                 [1 3]]
-                 [:containing-class "Foo"                               [1 2]]
+                 [:containing-class "Foo"                               (after-v3 version
+                                                                                  [1 2]
+                                                                                  [])]
                  [:containing-class nil                                 [3]]]]
           (testing (format "'not' query on field '%s'" field)
             (let [expected  (expected-resource-events
@@ -316,6 +328,42 @@
                 actual    (resource-events-query-result version query)]
             (is (= actual expected)
                 (format "Results didn't match for query '%s'" query))))))))
+
+(deftestseq resource-event-queries-for-v4+
+  [version versions
+   :when (not (contains? #{:v2 :v3} version))]
+  (let [basic             (store-example-report! (:basic reports) (now))
+        basic2            (store-example-report! (:basic2 reports) (now))
+        report-hash       (:hash basic)
+        actual* #(resource-events-query-result version %)
+        expected* (fn [events-map event-ids report]
+                    (expected-resource-events version (kitchensink/select-values events-map event-ids) report))
+        basic-events-map  (get-events-map (:basic reports))
+        basic2-events-map (get-events-map (:basic2 reports))]
+
+    (are [query event-ids] (= (actual* query)
+                              (expected* basic-events-map event-ids basic))
+
+         ["=" "configuration-version" "a81jasj123"] [1 2 3]
+         ["=" "run-start-time" "2011-01-01T12:00:00-03:00"] [1 2 3]
+         ["=" "run-end-time" "2011-01-01T12:10:00-03:00"] [1 2 3]
+         ["=" "timestamp" "2011-01-01T12:00:01-03:00"] [1]
+         ["~" "configuration-version" "a81jasj"] [1 2 3]
+         ["<" "line" 2] [1]
+         ["null?" "line" true] [2]
+         ["or"
+          ["<" "line" 2]
+          ["null?" "line" true]] [1 2]
+         ["<=" "line" 2] [1 3])
+
+    (are [query basic-event-ids basic2-event-ids] (= (actual* query)
+                                                     (into (expected* basic-events-map basic-event-ids basic)
+                                                           (expected* basic2-events-map basic2-event-ids basic2)))
+         ["=" "containment-path" "Foo"] [3] [6]
+         ["~" "containment-path" "Fo"] [3] [6]
+         [">" "line" 1] [3] [4 5 6]
+         [">=" "line" 1] [1 3] [4 5 6]
+         ["null?" "line" false] [1 3] [4 5 6])))
 
 (deftest latest-report-resource-event-queries
   (let [basic1        (store-example-report! (:basic reports) (now))

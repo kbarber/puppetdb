@@ -1,5 +1,5 @@
 ---
-title: "PuppetDB 2.0 » API » v4 » Query Operators"
+title: "PuppetDB 2.1 » API » v4 » Query Operators"
 layout: default
 canonical: "/puppetdb/latest/api/query/v4/operators.html"
 ---
@@ -23,31 +23,27 @@ The available fields for each endpoint are listed in that endpoint's documentati
 
 ### `=` (equality)
 
-**Matches if:** the field's actual value is exactly the same as the provided value. Note that this **does not** coerce values --- the provided value must be the same data type as the field. In particular, be aware that:
+**Matches if:** the field's actual value is exactly the same as the provided value. Note that this **will** coerce values if the provided value is numeric and the target field is coercible (i.e. fact values), but will not coerce if the provided value is a string
 
 * Most fields are strings.
 * Some fields are booleans.
-* Numbers in resource parameters from Puppet are usually stored as strings, and equivalent numbers will **not** match --- if the value of `someparam` were "0", then `["=", "someparam", "0.0"]` wouldn't match.
+* Numbers in resource parameters from Puppet are usually stored as strings, if the value of `someparam` were "0", then `["=", "someparam", "0.0"]` wouldn't match, use `["=", "someparam", 0.0]`.
 
 ### `>` (greater than)
 
-**Matches if:** the field is greater than the provided value. Coerces both the field and value to floats or integers; if
-they can't be coerced, the operator will not match.
+**Matches if:** the field is greater than the provided value. If the column is coercible (such as fact values), it will coerce both the field and value to floats or integers. This operator can be used on timestamps but is not supported on strings.
 
 ### `<` (less than)
 
-**Matches if:** the field is less than the provided value. Coerces both the field and value to floats or integers; if
-they can't be coerced, the operator will not match.
+**Matches if:** the field is greater than the provided value. If the column is coercible (such as fact values), it will coerce both the field and value to floats or integers. This operator can be used on timestamps but is not supported on strings.
 
 ### `>=` (less than or equal to)
 
-**Matches if:** the field is greater than or equal to the provided value. Coerces both the field and value to floats or integers; if
-they can't be coerced, the operator will not match.
+**Matches if:** the field is greater than the provided value. If the column is coercible (such as fact values), it will coerce both the field and value to floats or integers. This operator can be used on timestamps but is not supported on strings.
 
 ### `<=` (greater than or equal to)
 
-**Matches if:** the field is less than or equal to the provided value. Coerces both the field and value to floats or integers; if
-they can't be coerced, the operator will not match.
+**Matches if:** the field is greater than the provided value. If the column is coercible (such as fact values), it will coerce both the field and value to floats or integers. This operator can be used on timestamps but is not supported on strings.
 
 ### `~` (regexp match)
 
@@ -65,6 +61,17 @@ The following example would match if the `certname` field's actual value resembl
 > * [PostgreSQL regexp features](http://www.postgresql.org/docs/9.1/static/functions-matching.html#POSIX-SYNTAX-DETAILS)
 > * [HSQLDB (embedded database) regexp features](http://docs.oracle.com/javase/6/docs/api/java/util/regex/Pattern.html)
 
+### `null?` (is null)
+
+**Matches if:** the field's value is null, or if there is a value specified for the field, depending on the second argument to the operator
+
+The following example would return events that do not have an associated line number:
+
+    ["null?" "line" true]
+
+Similarly, the below query would return events that have a specified line number:
+
+    ["null?" "line" false]
 
 
 ## Boolean Operators
@@ -135,22 +142,11 @@ As the second argument of an `in` statement, an `extract` statement acts as a li
 
 A subquery may only be used as the second argument of an `extract` statement, where it acts as a collection of PuppetDB objects. Each of the objects returned by the subquery has many fields; the `extract` statement takes the value of one field from each of those objects, and passes that list of values to the `in` statement that contains it.
 
-In version 2 of the query API, the available subqueries are:
+The available subqueries are:
 
-* [`select-resources`](#select-resources)
-* [`select-facts`](#select-facts)
-
-#### `select-resources`
-
-A `select-resources` subquery may **only** be used as the second argument of an `extract` statement.
-
-It takes a single argument, which must be a **complete query string** which would be valid for [the `/v4/resources` endpoint][resources]. (Note that `/v4/resources/<TYPE>` and `/v4/resources/<TYPE>/<TITLE>` cannot be directly subqueried.) Since the argument is a normal query string, it can itself include any number of `in` statements and subqueries.
-
-#### `select-facts`
-
-A `select-facts` subquery may **only** be used as the second argument of an `extract` statement.
-
-It takes a single argument, which must be a **complete query string** which would be valid for [the `/v4/facts` endpoint][facts]. (Note that `/v4/facts/<NAME>` and `/v4/facts/<NAME>/<VALUE>` cannot be directly subqueried.) Since the argument is a normal query string, it can itself include any number of `in` statements and subqueries.
+* `select-resources`
+* `select-facts`
+* `select-nodes`
 
 ### Subquery Examples
 
@@ -186,3 +182,13 @@ all Debian nodes.
             ["and",
               ["=", "name", "operatingsystem"],
               ["=", "value", "Debian"]]]]]]
+
+This query string queries the `/facts` endpoint for uptime_hours of all nodes with
+facts-environment `production`:
+
+    ["and",
+      ["=", "name", "uptime_hours"],
+      ["in", "certname",
+        ["extract", "certname",
+          ["select-nodes",
+            ["=", "facts-environment", "production"]]]]]

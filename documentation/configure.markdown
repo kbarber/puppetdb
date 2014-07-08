@@ -1,5 +1,5 @@
 ---
-title: "PuppetDB 2.0 » Configuration"
+title: "PuppetDB 2.1 » Configuration"
 layout: default
 canonical: "/puppetdb/latest/configure.html"
 ---
@@ -10,6 +10,7 @@ canonical: "/puppetdb/latest/configure.html"
 [postgres_ssl]: ./postgres_ssl.html
 [module]: ./install_via_module.html
 [low_catalog_dupe]: ./trouble_low_catalog_duplication.html
+[puppetdb.conf]: ./connect_puppet_master.html#edit-puppetdbconf
 
 Summary
 -----
@@ -145,14 +146,6 @@ Create a new class in a new module (something like `site::puppetdb::server::extr
         setting => 'catalog-hash-conflict-debugging',
         value   => 'true',
       }
-
-      ini_setting {'puppetdb-event-query-limit':
-        path    => "${confdir}/global.ini",
-        section => 'global',
-        setting => 'event-query-limit',
-        value   => '30000',
-      }
-
     }
 {% endhighlight %}
 
@@ -178,6 +171,8 @@ You can edit the logging configuration file while PuppetDB is running, and it wi
 
 ### `event-query-limit`
 
+> **Deprecated:** With event streaming this setting is now ignored and will be removed in the future.
+
 The maximum number of legal results that a resource event query can return.  If you issue a query that would result in more results than this value, the query will simply return an error.  (This can be used to prevent accidental queries that would yield huge numbers of results from consuming undesirable amounts of resources on the server.)
 
 The default value is 20000.
@@ -192,6 +187,12 @@ and override this setting to point to your proxy server.
 ### `catalog-hash-conflict-debugging`
 
 When this is set to true, debugging information will be written to `<vardir>/debug/catalog-hashes` every time a catalog is received with a hash that is different than the previously received catalog for that host. Note that this should only be enabled when troubleshooting performance related issues with PuppetDB and the database server. This will output many files and could potentially slow down a production PuppetDB instance. See the [Troubleshooting Low Catalog Duplication guide][low_catalog_dupe] for more information on the outputted files and debugging this problem.
+
+### `url-prefix`
+
+This optional setting may be used to mount the PuppetDB web application at a URL other than "/".  This should not be necessary
+unless you intend to run additional web applications in the same server with your PuppetDB instance.  **NOTE:** if you change
+this setting, you must also set the corresponding setting in your Puppet Master's [puppetdb.conf][puppetdb.conf] file.
 
 `[database]` Settings
 -----
@@ -461,6 +462,11 @@ This setting sets the maximum amount of space in megabytes that PuppetDB's Activ
 ### `temp-usage`
 
 This setting sets the maximum amount of space in megabytes that PuppetDB's ActiveMQ can use for temporary message storage.
+
+### `max-frame-size`
+
+This setting sets the maximum frame size for persisted activemq messages
+supplied in bytes.  Default value is 209715200 (i.e 200 MB).
 
 `[jetty]` (HTTP) Settings
 -----

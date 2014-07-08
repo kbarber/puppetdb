@@ -1,13 +1,15 @@
 (ns com.puppetlabs.puppetdb.test.http.environments
-  (:require [cheshire.core :as json]
+  (:require [com.puppetlabs.cheshire :as json]
             [com.puppetlabs.http :as pl-http]
             [com.puppetlabs.puppetdb.fixtures :as fixt]
             [com.puppetlabs.puppetdb.scf.storage :as storage]
             [clojure.test :refer :all]
-            [com.puppetlabs.puppetdb.testutils :refer [get-request]]
+            [com.puppetlabs.puppetdb.testutils :refer [get-request deftestseq]]
             [com.puppetlabs.puppetdb.testutils.nodes :as tu-nodes]))
 
-(fixt/defixture super-fixture :each fixt/with-test-db fixt/with-http-app)
+(use-fixtures :each fixt/with-test-db fixt/with-http-app)
+
+(def endpoints [[:v4 "/v4/environments"]])
 
 (deftest test-old-version-failures
   (is (thrown-with-msg? IllegalArgumentException
@@ -17,9 +19,11 @@
                         #"Environment queries not supported on v2"
                         (fixt/*app* (get-request "/v2/environments")))))
 
-(deftest test-all-environments
+(deftestseq test-all-environments
+  [[version endpoint] endpoints]
+
   (testing "without environments"
-    (is (empty? (json/parse-string (:body (fixt/*app* (get-request "/v4/environments")))))))
+    (is (empty? (json/parse-string (slurp (:body (fixt/*app* (get-request endpoint))))))))
 
   (testing "with environments"
     (doseq [env ["foo" "bar" "baz"]]
@@ -30,22 +34,24 @@
        (is (= #{{:name "foo"}
                 {:name "bar"}
                 {:name "baz"}}
-              (set (json/parse-string (:body (fixt/*app* (get-request "/v4/environments")))
+              (set (json/parse-string (slurp (:body (fixt/*app* (get-request endpoint))))
                                       true))))))
     (fixt/without-db-var
      (fn []
-       (let [res (fixt/*app* (get-request "/v4/environments"))]
+       (let [res (fixt/*app* (get-request endpoint))]
          (is (= #{{:name "foo"}
                   {:name "bar"}
                   {:name "baz"}}
-                (set @(future (json/parse-string (:body res)
+                (set @(future (json/parse-string (slurp (:body res))
                                                  true))))))))))
 
-(deftest test-query-environment
+(deftestseq test-query-environment
+  [[version endpoint] endpoints]
+
   (testing "without environments"
     (fixt/without-db-var
      (fn []
-       (is (empty? (json/parse-string (:body (fixt/*app* (get-request "/v4/environments/foo")))))))))
+       (is (= 404 (:status (fixt/*app* (get-request (str endpoint "/foo")))))))))
 
   (testing "with environments"
     (doseq [env ["foo" "bar" "baz"]]
@@ -53,15 +59,18 @@
     (fixt/without-db-var
      (fn []
        (is (= {:name "foo"}
-              (json/parse-string (:body (fixt/*app* (get-request "/v4/environments/foo")))
+              (json/parse-string (:body (fixt/*app* (get-request (str endpoint "/foo"))))
                                  true)))))))
 
-(deftest environment-subqueries
+(deftestseq environment-subqueries
+  [[version endpoint] endpoints]
+
   (let [{:keys [web1 web2 db puppet]} (tu-nodes/store-example-nodes)]
     (doseq [env ["foo" "bar" "baz"]]
       (storage/ensure-environment env))
 
-    (are [query expected] (= expected (json/parse-string (:body (fixt/*app* (get-request "/v4/environments" query))) true))
+    (are [query expected] (= expected (json/parse-string (slurp (:body (fixt/*app* (get-request endpoint query))))
+                                                         true))
 
          ["in" "name"
           ["extract" "environment"
@@ -92,24 +101,4 @@
                ["select-resources"
                 ["and"
                  ["=" "type" "Class"]]]]]]]]]
-         [{:name "DEV"}])
-
-        (are [env query expected] (= expected (json/parse-string (:body (fixt/*app* (get-request (str "/v4/environments/" env) query))) true))
-
-         "DEV"
-         ["in" "name"
-          ["extract" "environment"
-           ["select-facts"
-            ["and"
-             ["=" "name" "operatingsystem"]
-             ["=" "value" "Debian"]]]]]
-         {:name "DEV"}
-
-         "foo"
-         ["in" "name"
-          ["extract" "environment"
-           ["select-facts"
-            ["and"
-             ["=" "name" "operatingsystem"]
-             ["=" "value" "Debian"]]]]]
-         nil)))
+         [{:name "DEV"}])))

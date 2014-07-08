@@ -28,7 +28,7 @@
   :pedantic? :abort
 
   :dependencies [[org.clojure/clojure "1.6.0"]
-                 [cheshire "5.2.0"]
+                 [cheshire "5.3.1"]
                  [org.clojure/core.match "0.2.0-rc5"]
                  [org.clojure/math.combinatorics "0.0.4"]
                  [org.clojure/tools.logging "0.2.6"]
@@ -61,15 +61,19 @@
                  [org.slf4j/jcl-over-slf4j "1.7.5"]
                  ;; WebAPI support libraries.
                  [net.cgrand/moustache "1.1.0" :exclusions [ring/ring-core org.clojure/clojure]]
+                 [compojure "1.1.6"]
                  [clj-http "0.5.3"]
                  [ring/ring-core "1.2.1" :exclusions [javax.servlet/servlet-api]]
                  [org.apache.commons/commons-compress "1.8"]
                  [puppetlabs/kitchensink ~ks-version]
                  [puppetlabs/trapperkeeper ~tk-version]
                  [puppetlabs/trapperkeeper-webserver-jetty9 ~tk-jetty9-version]
-                 [prismatic/schema "0.2.0"]
+                 [prismatic/schema "0.2.1"]
                  [org.clojure/tools.macro "0.1.5"]
-                 [com.novemberain/pantomime "2.1.0"]]
+                 [com.novemberain/pantomime "2.1.0"]
+                 [fast-zip-visit "1.0.2"]]
+
+  :jvm-opts ["-XX:MaxPermSize=128M"]
 
   ;;The below test-selectors is basically using the PUPPETDB_DBTYPE
   ;;environment variable to be the test selector.  The selector below
@@ -87,7 +91,8 @@
                                   [puppetlabs/trapperkeeper ~tk-version :classifier "test"]
                                   [puppetlabs/kitchensink ~ks-version :classifier "test"]
                                   [puppetlabs/trapperkeeper-webserver-jetty9 ~tk-jetty9-version :classifier "test"]
-                                  [org.flatland/ordered "1.5.2"]]}}
+                                  [org.flatland/ordered "1.5.2"]
+                                  [org.clojure/test.check "0.5.8"]]}}
 
   :jar-exclusions [#"leiningen/"]
 
