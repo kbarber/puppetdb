@@ -15,9 +15,9 @@
            (s/trim out)
            "0.0-dev-build"))))))
 
-(def tk-version "0.3.4")
-(def tk-jetty9-version "0.3.3")
-(def ks-version "0.5.3")
+(def tk-version "0.4.2")
+(def tk-jetty9-version "0.5.3-SNAPSHOT")
+(def ks-version "0.7.1")
 
 (defproject puppetdb (version-string)
   :description "Puppet-integrated catalog and fact storage"
@@ -58,7 +58,7 @@
                  [clamq/clamq-activemq "0.4" :exclusions [org.slf4j/slf4j-api]]
                  [org.apache.activemq/activemq-core "5.6.0" :exclusions [org.slf4j/slf4j-api org.fusesource.fuse-extra/fusemq-leveldb]]
                  ;; bridge to allow some spring/activemq stuff to log over slf4j
-                 [org.slf4j/jcl-over-slf4j "1.7.5"]
+                 [org.slf4j/jcl-over-slf4j "1.7.7"]
                  ;; WebAPI support libraries.
                  [net.cgrand/moustache "1.1.0" :exclusions [ring/ring-core org.clojure/clojure]]
                  [compojure "1.1.6"]
