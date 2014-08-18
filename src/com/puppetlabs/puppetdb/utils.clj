@@ -111,3 +111,4 @@
   ks in map m."
   [m ks f]
     (reduce #(update-in %1 [%2] f) m ks))
+

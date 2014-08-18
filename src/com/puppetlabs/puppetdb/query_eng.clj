@@ -15,7 +15,8 @@
             [clj-time.coerce :refer [to-timestamp]]
             [puppetlabs.kitchensink.core :as ks]
             [com.puppetlabs.puppetdb.query.paging :as paging]
-            [clojure.tools.logging :as log]))
+            [clojure.tools.logging :as log]
+            [com.puppetlabs.puppetdb.dev :as dev]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Plan - functions/transformations of the internal query plan
@@ -806,6 +807,7 @@
         paged-sql (if augmented-paging-options
                     (jdbc/paged-sql sql augmented-paging-options entity)
                     sql)
+        _ (dev/trace-sql paged-sql params)
         result-query {:results-query (apply vector paged-sql params)}]
     (if count?
       (assoc result-query :count-query (apply vector (jdbc/count-sql entity sql) params))
