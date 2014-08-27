@@ -1,5 +1,5 @@
 ---
-title: "PuppetDB 2.1 » Installing PuppetDB From Packages"
+title: "PuppetDB 2.2 » Installing PuppetDB From Packages"
 layout: default
 canonical: "/puppetdb/latest/install_from_packages.html"
 ---
@@ -36,7 +36,7 @@ Step 1: Install and Configure Puppet
 -----
 If Puppet isn't fully installed and configured yet on your PuppetDB server, [install it][installpuppet] and request/sign/retrieve a certificate for the node.
 
-[installpuppet]: /guides/installation.html
+[installpuppet]: /guides/install_puppet/pre_install.html
 
 Your PuppetDB server should be running puppet agent and have a signed certificate from your puppet master server. If you run `puppet agent --test`, it should successfully complete a run, ending with "`notice: Finished catalog run in X.XX seconds`."
 

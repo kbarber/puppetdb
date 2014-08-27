@@ -1,5 +1,5 @@
 ---
-title: "PuppetDB 2.1 » API » v2 » Querying Metrics"
+title: "PuppetDB 2.2 » API » v2 » Querying Metrics"
 layout: default
 canonical: "/puppetdb/latest/api/query/v2/metrics.html"
 ---
@@ -9,7 +9,7 @@ canonical: "/puppetdb/latest/api/query/v2/metrics.html"
 Querying PuppetDB metrics is accomplished by making an HTTP request
 to paths under the `/v2/metrics` REST endpoint.
 
-> **Note:** The v2 API is deprecated. It is recommended that you use the v3 API instead.
+> **Note:** The v2 API is deprecated. We recommend that you use the v3 API instead.
 
 ## Listing available metrics
 
@@ -107,8 +107,7 @@ Additionally, we also support the following explicit names:
   submit new catalogs, facts, etc.
 * `metrics`: Stats relating to the metrics REST endpoint. This is the
   endpoint you're reading about right now!
-* `facts`: Stats relating to fact querying. This is the endpoint used
-  by the puppetmaster for inventory service queries.
+* `facts`: Stats relating to fact querying.
 * `resources`: Stats relating to resource querying. This is the
   endpoint used when collecting exported resources.
 

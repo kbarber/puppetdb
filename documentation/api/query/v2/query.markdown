@@ -1,5 +1,5 @@
 ---
-title: "PuppetDB 2.1 » API » v2 » Query Structure"
+title: "PuppetDB 2.2 » API » v2 » Query Structure"
 layout: default
 canonical: "/puppetdb/latest/api/query/v2/query.html"
 ---
@@ -14,11 +14,11 @@ canonical: "/puppetdb/latest/api/query/v2/query.html"
 
 ## Summary
 
-PuppetDB's query API can retrieve data objects from PuppetDB for use in other applications. For example, the terminus plugins for puppet masters use this API to collect exported resources, and to translate node facts into the inventory service.
+PuppetDB's query API can retrieve data objects from PuppetDB for use in other applications. For example, the terminus plugins for puppet masters use this API to collect exported resources.
 
 The query API is implemented as HTTP URLs on the PuppetDB server. By default, it can only be accessed over the network via host-verified HTTPS; [see the jetty settings][jetty] if you need to access the API over unencrypted HTTP.
 
-> **Note:** The v2 API is deprecated. It is recommended that you use the v3 API instead.
+> **Note:** The v2 API is deprecated. We recommend that you use the v3 API instead.
 
 ## API URLs
 

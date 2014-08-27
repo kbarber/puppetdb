@@ -1,5 +1,5 @@
 ---
-title: "PuppetDB 2.1 » Community Projects and Add-ons"
+title: "PuppetDB 2.2 » Community Projects and Add-ons"
 layout: default
 canonical: "/puppetdb/latest/community_add_ons.html"
 ---
@@ -11,7 +11,7 @@ canonical: "/puppetdb/latest/community_add_ons.html"
 [dashboard]: ./maintain_and_tune.html#monitor-the-performance-dashboard
 [query]: https://github.com/dalen/puppet-puppetdbquery
 [exports]: http://forge.puppetlabs.com/zack/exports
-[exported]: /puppet/3/reference/lang_exported.html
+[exported]: /puppet/latest/reference/lang_exported.html
 
 [Jason Hancock --- nagios-puppetdb][nagios]
 -----

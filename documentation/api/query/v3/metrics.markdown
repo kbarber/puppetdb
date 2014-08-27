@@ -1,5 +1,5 @@
 ---
-title: "PuppetDB 2.1 » API » v3 » Querying Metrics"
+title: "PuppetDB 2.2 » API » v3 » Querying Metrics"
 layout: default
 canonical: "/puppetdb/latest/api/query/v3/metrics.html"
 ---
@@ -107,8 +107,7 @@ Additionally, we also support the following explicit names:
   submit new catalogs, facts, etc.
 * `metrics`: Stats relating to the metrics REST endpoint. This is the
   endpoint you're reading about right now!
-* `facts`: Stats relating to fact querying. This is the endpoint used
-  by the puppetmaster for inventory service queries.
+* `facts`: Stats relating to fact querying.
 * `resources`: Stats relating to resource querying. This is the
   endpoint used when collecting exported resources.
 

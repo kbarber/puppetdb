@@ -1,23 +1,24 @@
 ---
-title: "PuppetDB 2.1 » API » v4 » Paged Queries"
+title: "PuppetDB 2.2 » API » v4 » Paged Queries"
 layout: default
 canonical: "/puppetdb/latest/api/query/v4/paging.html"
 ---
 
 [api]: ../../index.html
 [curl]: ../curl.html#using-curl-from-localhost-non-sslhttp
+[query]: ./query.html
 
-Most of PuppetDB's [query endpoints][api] support a general set of HTTP query parameters that
+Most of PuppetDB's [query endpoints][api] support a general set of HTTP URL parameters that
 can be used for paging results.
 
 > **Note:** The v4 API is experimental and may change without notice. For stability, it is recommended that you use the v3 API instead.
 
-## Query Parameters
+## URL Parameters for Paging Results
 
 ### `order-by`
 
 This parameter can be used to ask PuppetDB to return results sorted by one or more fields, in
-ascending or descending order.  The value must be an array of maps.  Each map represents a field
+ascending or descending order.  The value must be a JSON array of maps.  Each map represents a field
 to sort by, and the order that they are specified in the array determines the precedence for the
 sorting.
 
@@ -35,18 +36,18 @@ lists of legal fields, please refer to the documentation for the specific query 
 
 [Using `curl` from localhost][curl]:
 
-    curl -X GET http://localhost:8080/v4/facts --data-urlencode 'order-by=[{"field": "value", "order": "desc"}, {"field": "name"}]'
+    curl -X GET http://localhost:8080/v4/facts --data-urlencode 'order-by=[{"field": "certname", "order": "desc"}, {"field": "name"}]'
 
 ### `limit`
 
-This query parameter can be used to restrict the result set to a maximum number of results.
+This parameter can be used to restrict the result set to a maximum number of results.
 The value should be an integer.
 
 ### `include-total`
 
-This query parameter is used to indicate whether or not you wish to receive a count of how many total records would have been returned, had the query not been limited using the `limit` parameter.  The value should be a boolean, and defaults to `false`.
+This parameter lets you request a count of how many total records would have been returned, had the query not been limited using the `limit` parameter. This is useful if you want your application to show how far the user has navigated (e.g. "page 3 of 15").
 
-If `true`, the HTTP response will contain a header `X-Records`, whose value is an integer indicating the total number of results available.
+The value should be a boolean, and defaults to `false`. If `true`, the HTTP response will contain a header `X-Records`, whose value is an integer indicating the total number of results available.
 
 NOTE: setting this flag to `true` will introduce a minor performance hit on the query.
 
@@ -71,4 +72,4 @@ should generally be used in conjunction with `order-by`.
 
 [Using `curl` from localhost][curl]:
 
-    curl -X GET http://localhost:8080/v4/facts --data-urlencode 'order-by=[{"field": "value"}]' --data-urlencode 'limit=5' --data-urlencode 'offset=5'
+    curl -X GET http://localhost:8080/v4/facts --data-urlencode 'order-by=[{"field": "certname"}]' --data-urlencode 'limit=5' --data-urlencode 'offset=5'
