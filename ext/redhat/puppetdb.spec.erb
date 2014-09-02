@@ -138,7 +138,9 @@ PATH=/opt/puppet/bin:$PATH rake install PARAMS_FILE= DESTDIR=$RPM_BUILD_ROOT PE_
 PATH=/opt/puppet/bin:$PATH rake terminus PARAMS_FILE= DESTDIR=$RPM_BUILD_ROOT PE_BUILD=true
 
 mkdir -p $RPM_BUILD_ROOT/%{_localstatedir}/log/%{name}
+%if 0%{?_with_sysvinit}
 mkdir -p $RPM_BUILD_ROOT/%{_rundir}/%{name}
+%endif
 mkdir -p $RPM_BUILD_ROOT/%{_libexecdir}/%{name}
 touch  $RPM_BUILD_ROOT/%{_localstatedir}/log/%{name}/%{name}.log
 
@@ -202,12 +204,12 @@ fi
 %if 0%{?suse_version} && 0%{?_with_systemd}
 %service_del_postun %{name}.service
 %endif
+
+%if 0%{?_with_sysvinit}
 # Remove the rundir if this is an uninstall (as opposed to an upgrade)...
 if [ "$1" = "0" ]; then
     rm -rf %{_rundir}/%{name} || :
 fi
-
-%if 0%{?_with_sysvinit}
 # If this is an upgrade (as opposed to an install) then we need to check
 # and restart the service if it is running.
 if [ "$1" = "1" ] ; then
@@ -254,8 +256,9 @@ fi
 %{_datadir}/%{realname}/state
 %dir %{_localstatedir}/log/%{name}
 %ghost %{_localstatedir}/log/%{name}/%{name}.log
+%if 0%{?_with_sysvinit}
 %ghost %{_rundir}/%{name}
-
+%endif
 
 %files terminus
 %defattr(-, root, root)
