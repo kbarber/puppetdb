@@ -6,6 +6,8 @@ After=syslog.target network.target
 Type=simple
 EnvironmentFile=/etc/sysconfig/<%= @name %>
 User=<%= @name %>
+RuntimeDirectory=/var/run/<%= @name %>
+RuntimeDirectoryMode=0755
 PIDFile=/var/run/<%= @name %>/<%= @name %>.pid
 ExecStart=<%= @java_bin %> \
           $JAVA_ARGS \

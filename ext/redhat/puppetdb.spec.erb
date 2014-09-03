@@ -13,7 +13,7 @@
 %global _with_sysvinit 0
 
 # EL >= 7 and SLES >= 12 use systemd
-%if 0%{?rhel} >= 7 || 0%{?sles_version} >= 12
+%if 0%{?rhel} >= 7 || 0%{?suse_version} >= 1315
 %global _with_systemd 1
 %endif
 
@@ -22,7 +22,7 @@
 %global _old_el        1
 %endif
 
-%if 0%{?sles_version} && 0%{?sles_version} < 12
+%if 0%{?suse_version} && 0%{?suse_version} <= 1110
 %global _with_sysvinit 1
 %global _old_sles      1
 %endif
@@ -79,10 +79,15 @@ Requires:      procps
 %else
 BuildRequires: /usr/sbin/useradd
 %endif
-%if 0%{?_with_systemd}
-# Required for %%post, %%preun, %%postun
-Requires:       systemd
-BuildRequires:  systemd
+%if 0%{?rhel} && 0%{?_with_systemd}
+BuildRequires:    systemd
+Requires(post):   systemd
+Requires(preun):  systemd
+Requires(postun): systemd
+%endif
+%if 0%{?suse_version} && 0%{?_with_systemd}
+BuildRequires:    systemd
+%{?systemd_requires}
 %endif
 %if  0%{?_old_el}
 # Required for %%post and %%preun
@@ -133,7 +138,9 @@ PATH=/opt/puppet/bin:$PATH rake install PARAMS_FILE= DESTDIR=$RPM_BUILD_ROOT PE_
 PATH=/opt/puppet/bin:$PATH rake terminus PARAMS_FILE= DESTDIR=$RPM_BUILD_ROOT PE_BUILD=true
 
 mkdir -p $RPM_BUILD_ROOT/%{_localstatedir}/log/%{name}
+%if 0%{?_with_sysvinit}
 mkdir -p $RPM_BUILD_ROOT/%{_rundir}/%{name}
+%endif
 mkdir -p $RPM_BUILD_ROOT/%{_libexecdir}/%{name}
 touch  $RPM_BUILD_ROOT/%{_localstatedir}/log/%{name}/%{name}.log
 
@@ -154,8 +161,11 @@ useradd -r -g %{name} -d <%= @install_dir %> -s /sbin/nologin \
 
 %post
 export PATH=/opt/puppet/bin:$PATH
-%if 0%{?_with_systemd}
+%if 0%{?rhel} && 0%{?_with_systemd}
 %systemd_post %{name}.service
+%endif
+%if 0%{?suse_version} && 0%{?_with_systemd}
+%service_add_post %{name}.service
 %endif
 %if 0%{?_with_sysvinit}
 # If this is an install (as opposed to an upgrade)...
@@ -173,8 +183,11 @@ fi
 %preun
 # If this is an uninstall (as opposed to an upgrade) then
 #  we want to shut down and disable the service.
-%if 0%{?_with_systemd}
+%if 0%{?rhel} && 0%{?_with_systemd}
 %systemd_preun %{name}.service
+%endif
+%if 0%{?suse_version} && 0%{?_with_systemd}
+%service_del_preun %{name}.service
 %endif
 %if 0%{?_with_sysvinit}
 if [ "$1" = "0" ] ; then
@@ -185,15 +198,18 @@ fi
 
 
 %postun
-%if 0%{?_with_systemd}
+%if 0%{?rhel} && 0%{?_with_systemd}
 %systemd_postun_with_restart %{name}.service
 %endif
+%if 0%{?suse_version} && 0%{?_with_systemd}
+%service_del_postun %{name}.service
+%endif
+
+%if 0%{?_with_sysvinit}
 # Remove the rundir if this is an uninstall (as opposed to an upgrade)...
 if [ "$1" = "0" ]; then
     rm -rf %{_rundir}/%{name} || :
 fi
-
-%if 0%{?_with_sysvinit}
 # If this is an upgrade (as opposed to an install) then we need to check
 # and restart the service if it is running.
 if [ "$1" = "1" ] ; then
@@ -240,8 +256,9 @@ fi
 %{_datadir}/%{realname}/state
 %dir %{_localstatedir}/log/%{name}
 %ghost %{_localstatedir}/log/%{name}/%{name}.log
+%if 0%{?_with_sysvinit}
 %ghost %{_rundir}/%{name}
-
+%endif
 
 %files terminus
 %defattr(-, root, root)
