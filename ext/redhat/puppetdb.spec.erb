@@ -22,7 +22,7 @@
 %global _old_el        1
 %endif
 
-%if 0%{?suse_version} && 0%{?suse_version} <= 1110
+%if 0%{?suse_version} && 0%{?suse_version} < 1315
 %global _with_sysvinit 1
 %global _old_sles      1
 %endif
@@ -144,7 +144,7 @@ mkdir -p $RPM_BUILD_ROOT/%{_rundir}/%{name}
 mkdir -p $RPM_BUILD_ROOT/%{_libexecdir}/%{name}
 touch  $RPM_BUILD_ROOT/%{_localstatedir}/log/%{name}/%{name}.log
 
-%if 0%{?fedora} >= 16 || 0%{?rhel} >= 7 || 0%{?sles_version} >= 12
+%if 0%{?fedora} >= 16 || 0%{?rhel} >= 7 || 0%{?suse_version} >= 1315
 sed -i '/notifempty/a\    su %{name} %{name}' $RPM_BUILD_ROOT/%{_realsysconfdir}/logrotate.d/%{name}
 %endif
 
