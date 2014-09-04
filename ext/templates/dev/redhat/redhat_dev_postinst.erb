@@ -4,9 +4,6 @@
 export PATH=/opt/puppet/bin:$PATH
 <% end -%>
 
-# Setup the SSL stuff
-<%= @sbin_dir -%>/puppetdb ssl-setup
-
 # Correct permissions
 find  <%= @config_dir -%> -type f | xargs chmod 640
 chown -R <%= @name -%>:<%= @name -%> <%= @etc_dir %>

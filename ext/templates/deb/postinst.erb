@@ -4,10 +4,6 @@
 export PATH=/opt/puppet/bin:$PATH
 <% end -%>
 
-# Setup the SSL stuff
-
-<%= @sbin_dir -%>/puppetdb ssl-setup
-
 <%= ERB.new(File.read("ext/templates/directory_perms.erb")).result %>
 
 
