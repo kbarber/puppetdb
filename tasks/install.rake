@@ -83,7 +83,9 @@ task :install => [  JAR_FILE  ] do
       chmod 0755, "#{DESTDIR}/etc/rc.d/init.d/#{@name}"
     end
   elsif @osfamily == "suse"
-    if @operatingsystem =~ /SLES/ && @operatingsystemrelease.to_f >= 12
+    @operatingsystem = Facter.value(:operatingsystem).downcase
+    @operatingsystemrelease = Facter.value(:operatingsystemmajrelease)
+    if @operatingsystem =~ /sles/ && @operatingsystemrelease.to_f >= 12
       #systemd!
       mkdir_p "#{DESTDIR}/etc/sysconfig"
       mkdir_p "#{DESTDIR}/usr/lib/systemd/system"
