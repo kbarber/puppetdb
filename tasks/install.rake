@@ -66,7 +66,7 @@ task :install => [  JAR_FILE  ] do
     @operatingsystemrelease = Facter.value(:operatingsystemmajrelease)
     puts "operatingsystem is #{@operatingsystem}"
     puts "operatingsystemrelease is #{@operatingsystemrelease}"
-    if (@operatingsystem == "fedora" && @operatingsystemrelease.to_i >= 17) || (@operatingsystem =~ /redhat|centos/ && @operatingsystemrelease.to_f >= 7 )
+    if (@operatingsystem == "fedora" && @operatingsystemrelease.to_i >= 17) || (@operatingsystem =~ /redhat|centos/ && @operatingsystemrelease.to_i >= 7 )
       #systemd!
       mkdir_p "#{DESTDIR}/etc/sysconfig"
       mkdir_p "#{DESTDIR}/usr/lib/systemd/system"
@@ -83,7 +83,9 @@ task :install => [  JAR_FILE  ] do
       chmod 0755, "#{DESTDIR}/etc/rc.d/init.d/#{@name}"
     end
   elsif @osfamily == "suse"
-    if @operatingsystem =~ /SLES/ && @operatingsystemrelease.to_f >= 12
+    @operatingsystem = Facter.value(:operatingsystem).downcase
+    @operatingsystemrelease = Facter.value(:operatingsystemmajrelease)
+    if @operatingsystem =~ /sles/ && @operatingsystemrelease.to_i >= 12
       #systemd!
       mkdir_p "#{DESTDIR}/etc/sysconfig"
       mkdir_p "#{DESTDIR}/usr/lib/systemd/system"
