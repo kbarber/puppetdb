@@ -737,7 +737,8 @@
   "Remove fact paths that are not associated with a fact"
   []
   (time! (:gc-fact-paths metrics)
-         (sql/delete-rows :fact_values
+         ;; This stops this garbage collect from running
+         #_(sql/delete-rows :fact_values
             ["ID NOT IN (SELECT DISTINCT fact_value_id FROM facts)"])
          (sql/delete-rows :fact_paths
             ["ID NOT IN (SELECT path_id FROM fact_values)"])))
@@ -1201,7 +1202,10 @@
   (time! (:replace-facts metrics)
          (if-let [factset-ts (factset-timestamp name)]
            (when (.before factset-ts (to-timestamp timestamp))
-             (update-facts! fact-data))
+             (do
+               (update-facts! fact-data)
+               ;; If we uncomment this, it will run garbage collects for each replace facts
+               #_(delete-unassociated-fact-paths!)))
            (add-facts! fact-data))))
 
 (pls/defn-validated add-report!
