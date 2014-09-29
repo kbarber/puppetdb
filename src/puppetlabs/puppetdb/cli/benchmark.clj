@@ -38,22 +38,15 @@
    tick."
   (:import (java.io File))
   (:require [clojure.tools.logging :as log]
-            [puppetlabs.puppetdb.catalogs :as cat]
             [puppetlabs.puppetdb.catalog.utils :as catutils]
             [puppetlabs.trapperkeeper.logging :as logutils]
-            [clojure.java.jdbc :as sql]
-            [puppetlabs.puppetdb.command :as command]
-            [puppetlabs.puppetdb.http :as http]
             [puppetlabs.puppetdb.cheshire :as json]
-            [clj-http.client :as client]
-            [clj-http.util :as util]
             [fs.core :as fs]
             [puppetlabs.puppetdb.utils :as utils]
             [puppetlabs.kitchensink.core :as kitchensink]
             [clj-time.core :as time]
+            [puppetlabs.puppetdb.client :as client]
             [puppetlabs.puppetdb.random :refer [random-string random-bool]]
-            [puppetlabs.puppetdb.command.constants :refer [command-names]]
-            [puppetlabs.puppetdb.cli.import :refer [submit-facts]]
             [slingshot.slingshot :refer [try+]]))
 
 (def cli-description "Development-only benchmarking tool")
@@ -74,25 +67,6 @@
        (map try-load-file)
        (remove nil?)
        (vec)))
-
-(defn submit-catalog
-  "Send the given wire-format `catalog` (associated with `host`) to a
-  command-processing endpoint located at `puppetdb-host`:`puppetdb-port`."
-  [puppetdb-host puppetdb-port catalog]
-  (let [result (command/submit-command-via-http! puppetdb-host puppetdb-port
-                                                 (command-names :replace-catalog) 5 (json/generate-string catalog))]
-    (when-not (= http/status-ok (:status result))
-      (log/error result))))
-
-(defn submit-report
-  "Send the given wire-format `report` (associated with `host`) to a
-  command-processing endpoint located at `puppetdb-host`:`puppetdb-port`."
-  [puppetdb-host puppetdb-port report]
-  (let [result (command/submit-command-via-http!
-                puppetdb-host puppetdb-port
-                (command-names :store-report) 3 report)]
-    (when-not (= http/status-ok (:status result))
-      (log/error result))))
 
 (def mutate-fns
   "Functions that randomly change a wire-catalog format"
@@ -135,6 +109,7 @@
 
 (defn populate-database-with-facts
   "This will populate a database with semi-random structured facts.
+
   Aside from database host, port, and fact command version, arguments are
 
   *nodes : number of nodes to be submitted
@@ -153,7 +128,7 @@
                                                      (repeatedly #(if (< (rand) dup-rate)
                                                                     (rand-nth facts-pool)
                                                                     (random-structured-fact)))))}]
-        (submit-facts host port facts-version (json/generate-string fact-payload))))))
+        (client/submit-facts host port facts-version (json/generate-string fact-payload))))))
 
 (defn maybe-tweak-catalog
   "Slightly tweak the given catalog, returning a new catalog, `rand-percentage`
@@ -195,14 +170,14 @@
       (when catalog
         (future
           (try
-            (submit-catalog puppetdb-host puppetdb-port catalog)
+            (client/submit-catalog puppetdb-host puppetdb-port 5 catalog)
             (log/info (format "[%s] submitted catalog" host))
             (catch Exception e
               (log/error (format "[%s] failed to submit catalog: %s" host e))))))
       (when report
         (future
           (try
-            (submit-report puppetdb-host puppetdb-port report)
+            (client/submit-report puppetdb-host puppetdb-port 3 report)
             (log/info (format "[%s] submitted report" host))
             (catch Exception e
               (log/error (format "[%s] failed to submit report: %s" host e))))))
@@ -218,9 +193,9 @@
   (let [catalog (and catalog (maybe-tweak-catalog rand-percentage catalog))
         report (and report (update-report-run-fields report))]
     (when catalog
-      (submit-catalog puppetdb-host puppetdb-port catalog))
+      (client/submit-catalog puppetdb-host puppetdb-port 5 catalog))
     (when report
-      (submit-report puppetdb-host puppetdb-port report))
+      (client/submit-report puppetdb-host puppetdb-port 3 report))
     (assoc state :catalog catalog)))
 
 (defn submit-n-messages
