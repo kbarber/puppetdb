@@ -299,7 +299,7 @@
 
 (defn -main
   [& args]
-  (let [[options _]     (kitchensink/cli! args supported-cli-options required-cli-options)
+  (let [[options _]     (validate-cli! args)
         config          (-> (:config options)
                             (kitchensink/inis-to-map)
                             (get-in [:global :logging-config])
