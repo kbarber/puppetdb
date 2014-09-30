@@ -3,8 +3,10 @@
             [puppetlabs.puppetdb.http :as http]
             [clojure.tools.logging :as log]
             [puppetlabs.puppetdb.reports :as reports]
-            [clj-http.client :as client]
-            [puppetlabs.puppetdb.command.constants :refer [command-names]]))
+            [clj-http.client :as http-client]
+            [puppetlabs.puppetdb.command.constants :refer [command-names]]
+            [puppetlabs.puppetdb.cheshire :as json]
+            [puppetlabs.kitchensink.core :as kitchensink]))
 
 (defn submit-command-via-http!
   "Submits `payload` as a valid command of type `command` and
@@ -16,7 +18,7 @@
      {:pre [(string? command)
             (integer? version)]}
      (->> payload
-          (assemble-command command version)
+          (command/assemble-command command version)
           (submit-command-via-http! host port)))
   ([host port command-map]
      {:pre [(string? host)
@@ -24,12 +26,12 @@
             (map? command-map)]}
      (let [message (json/generate-string command-map)
            checksum (kitchensink/utf8-string->sha1 message)
-           url     (format "http://%s:%s/v4/commands?checksum=%s" host port checksum)]
-       (client/post url {:body               message
-                         :throw-exceptions   false
-                         :content-type       :json
-                         :character-encoding "UTF-8"
-                         :accept             :json}))))
+           url (format "http://%s:%s/v4/commands?checksum=%s" host port checksum)]
+       (http-client/post url {:body               message
+                              :throw-exceptions   false
+                              :content-type       :json
+                              :character-encoding "UTF-8"
+                              :accept             :json}))))
 
 (defn submit-catalog
   "Send the given wire-format `catalog` (associated with `host`) to a
