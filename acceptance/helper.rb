@@ -529,7 +529,7 @@ module PuppetDBExtensions
 
   # Queries the metrics endpoint for command processing results, return a hash
   # of results.
-  def command_prcessing_stats(host, counter = "processed")
+  def command_processing_stats(host, counter = "processed")
     metric = "com.puppetlabs.puppetdb.command:type=global,name=discarded"
 
     result = on host, %Q(curl http://localhost:8080/v3/metrics/mbean/#{CGI.escape(metric)} 2> /dev/null)
