@@ -180,9 +180,9 @@
   "Updates the producer-timestamp to be current, and randomly updates the leaves
    of the factset based on a percentage provided in `rand-percentage`."
   [rand-percentage factset]
-  (log/spy :info (-> factset
-                     (assoc "producer-timestamp" (time/now))
-                     (update-in ["values"] (partial randomize-map-leaves rand-percentage)))))
+  (-> factset
+      (assoc "producer-timestamp" (time/now))
+      (update-in ["values"] (partial randomize-map-leaves rand-percentage))))
 
 (defn timed-update-host
   "Send a new _clock tick_ to a host
