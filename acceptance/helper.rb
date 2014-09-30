@@ -532,12 +532,12 @@ module PuppetDBExtensions
   def command_processing_stats(host, counter = "processed")
     metric = "com.puppetlabs.puppetdb.command:type=global,name=discarded"
 
-    result = on host, %Q(curl http://localhost:8080/v3/metrics/mbean/#{CGI.escape(metric)} 2> /dev/null)
+    result = on host, %Q(curl http://localhost:8080/v3/metrics/mbean/#{CGI.escape(metric)})
 
     begin
-      JSON.parse(result)
+      JSON.parse(result.stdout)
     rescue JSON::ParserError => e
-      Beaker::Log.notify "Invalid JSON response: #{result}"
+      Beaker::Log.notify "Invalid JSON response: #{result.stdout}"
       raise e
     end
   end
