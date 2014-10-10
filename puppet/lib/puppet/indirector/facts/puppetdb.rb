@@ -63,6 +63,12 @@ class Puppet::Node::Facts::Puppetdb < Puppet::Indirector::REST
             facts = result.inject({}) do |a,h|
               a.merge(h['name'] => h['value'])
             end
+
+            # PDB-949: Since 'trusted' is a reserved keyword, we must strip this
+            # before returning the results to Puppet otherwise we'll get a
+            # reserved keyword error.
+            facts.delete('trusted')
+
             Puppet::Node::Facts.new(request.key, facts)
           end
         else
