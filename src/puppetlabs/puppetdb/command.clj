@@ -69,7 +69,8 @@
             [cheshire.custom :refer [JSONable]]
             [puppetlabs.puppetdb.command.constants :refer [command-names]]
             [puppetlabs.trapperkeeper.services :refer [defservice]]
-            [schema.core :as s]))
+            [schema.core :as s]
+            [puppetlabs.puppetdb.es :as es]))
 
 ;; ## Command parsing
 
@@ -239,9 +240,11 @@
                      (report/validate! version payload))
         certname    (:certname report)
         timestamp   (:received annotations)]
-    (jdbc/with-transacted-connection db
+    ;; Lets just not bother with db storage right now while we hack
+    #_(jdbc/with-transacted-connection db
       (scf-storage/maybe-activate-node! certname timestamp)
       (scf-storage/add-report! report timestamp))
+    (es/store-report report)
     (log/info (format "[%s] [%s] puppet v%s - %s"
                       id (command-names :store-report)
                       (:puppet_version report) (:certname report)))))
