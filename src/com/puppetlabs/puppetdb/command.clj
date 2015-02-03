@@ -376,7 +376,7 @@
                       (update-in [:producer-timestamp] to-timestamp)
                       (assoc :timestamp timestamp)
                       upon-error-throw-fatality)]
-    (jdbc/with-transacted-connection' db :repeatable-read
+    (jdbc/with-transacted-connection' db :serializable
       (scf-storage/maybe-activate-node! name timestamp)
       (scf-storage/replace-facts! fact-data))
     (log/info (format "[%s] [%s] %s" id (command-names :replace-facts) name))))
