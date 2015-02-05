@@ -991,7 +991,7 @@
      (let [in-list (jdbc/in-clause fact-ids)]
        (sql/transaction
 
-        (when (sutils/postgres?)
+        #_(when (sutils/postgres?)
           (sql/do-commands "SET CONSTRAINTS ALL DEFERRED")
 
           (sql/do-prepared (format "DELETE FROM fact_paths fp

@@ -43,7 +43,7 @@
   [f]
   (binding [*db* {:classname   "org.postgresql.Driver"
                   :subprotocol "postgresql"
-                  :subname     "puppetdb_test"
+                  :subname     "puppetdbtest"
                   :user        "puppetdb"
                   :password    "puppetdb"}]
     (sql/with-connection *db*

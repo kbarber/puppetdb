@@ -717,65 +717,119 @@
 (deftest fact-path-update-issue
   ;;Simulates to commands being process for two different machines at
   ;;the same time
+  (Thread/sleep 120000)
+  (println "2 minutes done 4 minutes")
+  (Thread/sleep 120000)
+  (println "2 minutes done 2 minutes to go")
+  (Thread/sleep 120000)
+  (println "Done waiting, lets go")
   (let [certname-1 "some_certname1"
         certname-2 "some_certname2"
+        certname-3 "some_certname3"
+        certname-4 "some_certname4"
+
         ;;facts for server 1, has the same "mytimestamp" value as the
         ;;facts for server 2
         facts-1a {:name certname-1
                   :environment nil
-                  :values {"domain" "mydomain1.com"
-                           "operatingsystem" "Debian"
-                           "mytimestamp" "1"}}
+                  :values {"domain" "domain-mydomain1.com"
+                           "operatingsystem" "os-Debian"
+                           "mytimestamp" "mytimestamp-1"}}
         facts-2a {:name certname-2
                   :environment nil
-                  :values {"domain" "mydomain2.com"
-                           "operatingsystem" "Debian"
-                           "mytimestamp" "1"}}
+                  :values {"domain" "domain-mydomain2.com"
+                           "operatingsystem" "os-Debian"
+                           "mytimestamp" "mytimestamp-1"}}
+        facts-3a {:name certname-3
+                  :environment nil
+                  :values {"fh2a" "fh2a-foo1"
+                           "fh2b" "fh2b-bar"
+                           "fh2c" "fh2c-bar"}}
+        facts-4a {:name certname-4
+                  :environment nil
+                  :values {"fh2a" "fh2a-foo2"
+                           "fh2b" "fh2b-bar"
+                           "fh2c" "fh2c-bar"}}
 
         ;;same facts as before, but now certname-1 has a different
         ;;fact value for mytimestamp (this will force a new fact_value
         ;;that is only used for certname-1
         facts-1b {:name certname-1
                   :environment nil
-                  :values {"domain" "mydomain1.com"
-                           "operatingsystem" "Debian"
-                           "mytimestamp" "1b"}}
+                  :values {"domain" "domain-mydomain1.com"
+                           "operatingsystem" "os-Debian"
+                           "mytimestamp" "mytimestamp-1b"}}
 
         ;;with this, certname-1 and certname-2 now have their own
         ;;fact_value for mytimestamp that is different from the
         ;;original mytimestamp that they originally shared
         facts-2b {:name certname-2
                   :environment nil
-                  :values {"domain" "mydomain2.com"
-                           "operatingsystem" "Debian"
-                           "mytimestamp" "2b"}}
+                  :values {"domain" "domain-mydomain2.com"
+                           "operatingsystem" "os-Debian"
+                           "mytimestamp" "mytimestamp-2b"}}
+
+        facts-3b {:name certname-3
+                  :environment nil
+                  :values {"fh2a" "fh2a-foo1"
+                           "fh2b" "fh2b-bar"
+                           "fh2c" "fh2c-bar-1"}}
+        facts-4b {:name certname-4
+                  :environment nil
+                  :values {"fh2a" "fh2a-foo2"
+                           "fh2b" "fh2b-bar"
+                           "fh2c" "fh2c-bar-2"}}
 
         ;;this fact set will disassociate mytimestamp from the facts
         ;;associated to certname-1, it will do the same thing for
         ;;certname-2
         facts-1c {:name certname-1
                   :environment nil
-                  :values {"domain" "mydomain1.com"
-                           "operatingsystem" "Debian"}}
+                  :values {"domain" "domain-mydomain1.com"
+                           "operatingsystem" "os-Debian"}}
         facts-2c {:name certname-2
                   :environment nil
-                  :values {"domain" "mydomain2.com"
-                           "operatingsystem" "Debian"}}
+                  :values {"domain" "domain-mydomain2.com"
+                           "operatingsystem" "os-Debian"}}
+        facts-3c {:name certname-3
+                  :environment nil
+                  :values {"fh2a" "fh2a-foo1"
+                           "fh2b" "fh2b-bar"
+                           "fh2c" "fh2c-bar-1"}}
+        facts-4c {:name certname-4
+                  :environment nil
+                  :values {"fh2a" "fh2a-foo2"
+                           "fh2b" "fh2b-bar"
+                           "fh2c" "fh2c-bar-2"}}
+
         command-1b   {:command (command-names :replace-facts)
                       :version 3
                       :payload facts-1b}
         command-2b   {:command (command-names :replace-facts)
                       :version 3
                       :payload facts-2b}
+        command-3b   {:command (command-names :replace-facts)
+                      :version 3
+                      :payload facts-3b}
+        command-4b   {:command (command-names :replace-facts)
+                      :version 3
+                      :payload facts-4b}
         command-1c   {:command (command-names :replace-facts)
                       :version 3
                       :payload facts-1c}
         command-2c   {:command (command-names :replace-facts)
                       :version 3
                       :payload facts-2c}
+        command-3c   {:command (command-names :replace-facts)
+                      :version 3
+                      :payload facts-3c}
+        command-4c   {:command (command-names :replace-facts)
+                      :version 3
+                      :payload facts-4c}
+
 
         ;; Wait for two threads to countdown before proceeding
-        latch (java.util.concurrent.CountDownLatch. 2)
+        latch (java.util.concurrent.CountDownLatch. 4)
 
         ;; I'm modifying delete-facts! so that I can coordinate access
         ;; between the two threads, I'm storing the reference to the
@@ -789,6 +843,8 @@
     (sql/transaction
      (scf-store/add-certname! certname-1)
      (scf-store/add-certname! certname-2)
+     (scf-store/add-certname! certname-3)
+     (scf-store/add-certname! certname-4)
      (scf-store/add-facts! {:name certname-1
                             :values (:values facts-1a)
                             :timestamp (now)
@@ -796,6 +852,16 @@
                             :producer-timestamp nil})
      (scf-store/add-facts! {:name certname-2
                             :values (:values facts-2a)
+                            :timestamp (now)
+                            :environment nil
+                            :producer-timestamp nil})
+     (scf-store/add-facts! {:name certname-3
+                            :values (:values facts-3a)
+                            :timestamp (now)
+                            :environment nil
+                            :producer-timestamp nil})
+     (scf-store/add-facts! {:name certname-4
+                            :values (:values facts-4a)
                             :timestamp (now)
                             :environment nil
                             :producer-timestamp nil}))
@@ -816,27 +882,43 @@
                                             ;;latch, the await will no longer block and both
                                             ;;threads will begin running again
                                             (.await latch)
-                                            (println "countdown to 2, proceeding" (thread-id))
+                                            (println "countdown from 4, proceeding" (thread-id))
                                             (flush)
                                             ;;Execute the normal delete-facts! function (unchanged)
-                                            (storage-delete-facts! factset fact-ids)
-                                            )]
-      (let [first-message? (atom false)
-            second-message? (atom false)
+                                            (try
+                                              (storage-delete-facts! factset fact-ids)
+                                              (catch Exception e (str "caught exception: " (.getMessage e)))))]
+      (let [message-1? (atom false)
+            message-2? (atom false)
+            message-3? (atom false)
+            message-4? (atom false)
             fut-1 (future
                     (test-msg-handler command-1b publish discard-dir
-                      (reset! first-message? true)))
+                      (reset! message-1? true)))
             _ (println "future 1 launched")
             _ (flush)
             fut-2 (future
                     (test-msg-handler command-2b publish discard-dir
                       (println "in the message handler?????")
-                      (reset! second-message? true)))
+                      (reset! message-2? true)))
             _ (println "future 2 launched")
+            _ (flush)
+            fut-3 (future
+                    (test-msg-handler command-3b publish discard-dir
+                      (reset! message-3? true)))
+            _ (println "future 3 launched")
+            _ (flush)
+            fut-4 (future
+                    (test-msg-handler command-4b publish discard-dir
+                      (println "in the message handler?????")
+                      (reset! message-4? true)))
+            _ (println "future 4 launched")
             _ (flush)]
 
         ;;The two commands are being submitted in future, ensure they
         ;;have both completed before proceeding
+        @fut-4
+        @fut-3
         @fut-2
         @fut-1
 
@@ -846,13 +928,20 @@
         (println "After second factset:")
         (clojure.pprint/pprint (query-to-vec "SELECT * from fact_values"))
 
-        (is (true? @first-message?))
-        (is (true? @second-message?))
+        (is (true? @message-1?))
+        (is (true? @message-2?))
+        (is (true? @message-3?))
+        (is (true? @message-4?))
 
         ;;Submit another factset that does NOT include mytimestamp,
         ;;this disassociates certname-1's fact_value (which is 1b)
         (test-msg-handler command-1c publish discard-dir
-          (reset! first-message? true))
+          (reset! message-1? true))
+
+        (println "showing fact_values after submitting command to first server")
+        (flush)
+
+        (clojure.pprint/pprint (query-to-vec "SELECT * from fact_values"))
 
         ;;Do the same thing with certname-2. Since the reference to 1b
         ;;and 2b has been removed, mytimestamp's path is no longer
@@ -860,7 +949,28 @@
         ;;of 1 is still in the table. It now attempting to delete that
         ;;fact path, when the mytimestamp 1 value is still in there.
         (test-msg-handler command-2c publish discard-dir
-          (println (extract-error-message publish)))))))
+          (println (extract-error-message publish)))
+
+        (println "showing fact_values after submitting command to second server")
+        (flush)
+
+        (clojure.pprint/pprint (query-to-vec "SELECT * from fact_values"))
+
+        (test-msg-handler command-3c publish discard-dir
+          (println (extract-error-message publish)))
+
+        (println "showing fact_values after submitting command to third server")
+        (flush)
+
+        (clojure.pprint/pprint (query-to-vec "SELECT * from fact_values"))
+
+        (test-msg-handler command-4c publish discard-dir
+          (println (extract-error-message publish)))
+
+        (println "showing fact_values after submitting command to third server")
+        (flush)
+
+        (clojure.pprint/pprint (query-to-vec "SELECT * from fact_values"))))))
 
 (deftest concurrent-catalog-updates
   (testing "Should allow only one replace catalogs update for a given cert at a time"
