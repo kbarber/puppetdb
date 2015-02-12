@@ -83,7 +83,7 @@ Puppet::Reports.register_report(:puppetdb) do
           'level' => log.level,
           'message' => log.message,
           'source' => log.source,
-          'tags' => log.tags,
+          'tags' => log.tags.to_data_hash,
           'time' => Puppet::Util::Puppetdb.to_wire_time(log.time),
         }
         log_list.push(log_hash)
