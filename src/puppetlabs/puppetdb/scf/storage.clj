@@ -29,6 +29,7 @@
             [puppetlabs.puppetdb.scf.hash :as shash]
             [puppetlabs.puppetdb.scf.storage-utils :as sutils]
             [puppetlabs.puppetdb.scf.hash-debug :as hashdbg]
+            [puppetlabs.puppetdb.cheshire :as json]
             [schema.core :as s]
             [schema.macros :as sm]
             [puppetlabs.puppetdb.schema :as pls]
@@ -1166,7 +1167,8 @@
                                        :receive_time           (to-timestamp timestamp)
                                        :transaction_uuid       transaction_uuid
                                        :environment_id         (ensure-environment environment)
-                                       :status_id              (ensure-status status)}))
+                                       :status_id              (ensure-status status)
+                                       :logs                   (json/generate-string logs)}))
 
                   report-id (:id insert-results)
                   resource-event-rows (map #(-> %
@@ -1180,7 +1182,7 @@
 
               (apply sql/insert-records :resource_events resource-event-rows)
 
-              (let [log-rows (map #(-> %
+              (let [#_#_log-rows (map #(-> %
                                    (utils/update-when [:time] to-timestamp)
                                    (utils/update-when [:tags] array-fn)
                                    (assoc :level_id (ensure-log-level (% :level)))
@@ -1188,7 +1190,7 @@
                                    (dissoc :level))
                                   logs)
                     metrics-rows (map (partial create-metrics-rows report-hash) report-metrics)]
-                (apply sql/insert-records :logs log-rows)
+                #_(apply sql/insert-records :logs log-rows)
                 (apply sql/insert-records :report_metrics metrics-rows))
               (if update-latest-report?
                 (update-latest-report! certname)))))))

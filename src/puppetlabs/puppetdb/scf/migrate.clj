@@ -1027,6 +1027,12 @@
    "ALTER TABLE logs ADD CONSTRAINT logs_report_id_fkey FOREIGN KEY (report_id) REFERENCES reports(id) ON DELETE CASCADE ON UPDATE CASCADE"
    "ALTER TABLE logs ADD CONSTRAINT logs_level_id_fkey FOREIGN KEY (level_id) REFERENCES log_levels(id) ON DELETE RESTRICT ON UPDATE RESTRICT"))
 
+(defn log-storage-text-blobs
+  "Log storage text blob version"
+  []
+  (sql/do-commands
+   "ALTER TABLE reports ADD COLUMN logs text"))
+
 (defn add-metrics-capacity
   "Insert columns related to storage of metrics"
   []
@@ -1092,7 +1098,8 @@
    27 switch-value-string-index-to-gin
    28 insert-factset-hash-column
    29 migrate-to-report-id
-   30 log-storage
+;;   30 log-storage
+   30 log-storage-text-blobs
    31 add-metrics-capacity})
 
 (def desired-schema-version (apply max (keys migrations)))
