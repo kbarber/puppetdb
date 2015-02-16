@@ -1031,7 +1031,7 @@
   "Log storage text blob version"
   []
   (sql/do-commands
-   "ALTER TABLE reports ADD COLUMN logs text"))
+   "ALTER TABLE reports ADD COLUMN logs json"))
 
 (defn add-metrics-capacity
   "Insert columns related to storage of metrics"

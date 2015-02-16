@@ -27,7 +27,10 @@
    org.postgresql.util.PGobject
    (fn [data jsonGenerator]
      ;; Naive, assumes sequences always
-     (generate/encode-seq (core/parse-string (.toString data)) jsonGenerator))))
+     (case (.getType data)
+       "json"
+       #_(.writeRawValue jsonGenerator (.getValue data))
+       (generate/encode-seq (core/parse-string (.getValue data)) jsonGenerator)))))
 
 (def
   ^{:doc "Registers some common encoders for cheshire JSON encoding.

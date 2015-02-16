@@ -18,6 +18,7 @@
   The standard set of operations on information in the database will
   likely result in dangling resources and catalogs; to clean these
   up, it's important to run `garbage-collect!`."
+  (:import (org.postgresql.util PGobject))
   (:require [puppetlabs.puppetdb.catalogs :as cat]
             [puppetlabs.puppetdb.facts :as facts]
             [puppetlabs.kitchensink.core :as kitchensink]
@@ -1154,7 +1155,10 @@
         report-metrics (:metrics report)]
     (time! (:store-report metrics)
            (sql/transaction
-            (let [insert-results
+            (let [logs-pgobject (doto (PGobject.)
+                                  (.setType "json")
+                                  (.setValue (json/generate-string logs)))
+                  insert-results
                   (sql/insert-record :reports
                                      (maybe-environment
                                       {:hash                   report-hash
@@ -1168,7 +1172,7 @@
                                        :transaction_uuid       transaction_uuid
                                        :environment_id         (ensure-environment environment)
                                        :status_id              (ensure-status status)
-                                       :logs                   (json/generate-string logs)}))
+                                       :logs                   logs-pgobject}))
 
                   report-id (:id insert-results)
                   resource-event-rows (map #(-> %
