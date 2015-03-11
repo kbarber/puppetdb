@@ -12,6 +12,7 @@
             [puppetlabs.puppetdb.query.catalogs :as catalogs]
             [puppetlabs.puppetdb.query.factsets :as factsets]
             [puppetlabs.puppetdb.query.resources :as resources]
+            [puppetlabs.puppetdb.query-eng.munge :as qm]
             [puppetlabs.kitchensink.core :as kitchensink]
             [puppetlabs.puppetdb.cheshire :as json]
             [puppetlabs.puppetdb.query :as query]
@@ -49,10 +50,11 @@
           :edges [edges/query->sql edges/munge-result-rows]
           :catalogs [catalogs/query->sql catalogs/munge-result-rows])]
     (jdbc/with-transacted-connection db
-      (let [{[sql & params] :results-query
-             count-query :count-query
-             projected-fields :projected-fields} (query->sql version query
-                                                             paging-options)
+      (let [{[sql & params]   :results-query
+             count-query      :count-query
+             projected-fields :projected-fields
+             plan             :plan} (query->sql version query
+                                                 paging-options)
              query-error (promise)
              resp (output-fn
                    (fn [f]
@@ -65,7 +67,8 @@
                                 (first %)
                                 (deliver query-error nil)
                                 %)
-                             (munge-fn version projected-fields paging-options))))
+                             (munge-fn version projected-fields paging-options)
+                             (qm/standard-munge version plan paging-options))))
                        (catch java.sql.SQLException e
                          (deliver query-error e)
                          nil))))]

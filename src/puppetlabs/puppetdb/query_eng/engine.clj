@@ -322,6 +322,8 @@
                              "resources" {:type :json
                                           :queryable? false
                                           :expandable? true
+                                          :agg-fields [:resource :type :title :tags :exported
+                                                       :file :line :parameters]
                                           :field {:select [(h/json-agg
                                                             (h/row-to-json
                                                              (h/row
@@ -1224,13 +1226,14 @@
   (when paging-options
     (paging/validate-order-by! (map keyword (queryable-fields query-rec)) paging-options))
   (let [{:keys [plan params]} (->> user-query
-                                   (push-down-context query-rec)
+                                   (push-down-context (log/spy query-rec))
                                    expand-user-query
                                    (convert-to-plan query-rec paging-options)
                                    extract-all-params)
         sql (plan->sql plan)
         paged-sql (jdbc/paged-sql sql paging-options)
         result-query {:results-query (apply vector paged-sql params)
+                      :plan plan
                       :projected-fields (map keyword (:late-projected-fields plan))}]
     (if count?
       (assoc result-query :count-query (apply vector (jdbc/count-sql sql) params))
