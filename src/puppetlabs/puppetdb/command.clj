@@ -62,6 +62,7 @@
             [puppetlabs.puppetdb.mq :as mq]
             [puppetlabs.kitchensink.core :as kitchensink]
             [puppetlabs.puppetdb.cheshire :as json]
+            [puppetlabs.puppetdb.cthun :as cthun]
             [puppetlabs.puppetdb.jdbc :as jdbc]
             [puppetlabs.puppetdb.schema :refer [defn-validated]]
             [puppetlabs.puppetdb.utils :as utils]
@@ -236,7 +237,8 @@
       (scf-storage/add-report! report timestamp))
     (log/info (format "[%s] [%s] puppet v%s - %s"
                       id (command-names :store-report)
-                      puppet_version certname))))
+                      puppet_version certname))
+    (cthun/send-data id payload)))
 
 (defmethod process-command! [(command-names :store-report) 5]
   [{:keys [version] :as command} {:keys [db]}]

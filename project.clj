@@ -32,13 +32,13 @@
                  [org.clojure/core.match "0.2.0-rc5"]
                  [org.clojure/math.combinatorics "0.0.4"]
                  [org.clojure/math.numeric-tower "0.0.4"]
-                 [org.clojure/tools.logging "0.2.6"]
+                 [org.clojure/tools.logging "0.3.1"]
                  [org.clojure/tools.nrepl "0.2.3"]
                  [puppetlabs/tools.namespace "0.2.4.1"]
                  [vimclojure/server "2.3.6" :exclusions [org.clojure/clojure]]
                  [clj-stacktrace "0.2.6"]
                  [metrics-clojure "0.7.0" :exclusions [org.clojure/clojure org.slf4j/slf4j-api]]
-                 [clj-time "0.5.1"]
+                 [clj-time "0.9.0"]
                  [org.clojure/java.jmx "0.3.1"]
                  ;; Filesystem utilities
                  [fs "1.1.2"]
@@ -47,7 +47,7 @@
                  ;; Job scheduling
                  [overtone/at-at "1.2.0"]
                  ;; Nicer exception handling with try+/throw+
-                 [slingshot "0.10.3"]
+                 [slingshot "0.12.2"]
 
                  ;; Database connectivity
                  [com.jolbox/bonecp "0.7.1.RELEASE" :exclusions [org.slf4j/slf4j-api]]
@@ -66,7 +66,7 @@
                  ;; WebAPI support libraries.
                  [net.cgrand/moustache "1.1.0" :exclusions [ring/ring-core org.clojure/clojure]]
                  [compojure "1.1.6"]
-                 [clj-http "1.0.1"]
+                 [clj-http "1.1.1"]
                  [ring/ring-core "1.2.1" :exclusions [javax.servlet/servlet-api]]
                  [org.apache.commons/commons-compress "1.8"]
                  [puppetlabs/kitchensink ~ks-version]
@@ -78,7 +78,9 @@
                  [fast-zip-visit "1.0.2"]
                  [robert/hooke "1.3.0"]
                  [honeysql "0.5.2"]
-                 [org.clojure/data.xml "0.0.8"]]
+                 [org.clojure/data.xml "0.0.8"]
+                 [puppetlabs/cthun-client "0.0.1" :exclusions [org.eclipse.jetty/jetty-io
+                                                               org.eclipse.jetty/jetty-util]]]
 
   :jvm-opts ["-XX:MaxPermSize=128M"]
 
