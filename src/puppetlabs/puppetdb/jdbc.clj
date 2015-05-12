@@ -6,6 +6,7 @@
             [clojure.java.jdbc.internal :as jint]
             [clojure.string :as string]
             [clojure.tools.logging :as log]
+            [puppetlabs.puppetdb.hikari :as hcp]
             [puppetlabs.kitchensink.core :as kitchensink]
             [clojure.string :as str]
             [puppetlabs.puppetdb.time :as pl-time]
@@ -265,11 +266,15 @@
   [db-spec tx-isolation-level f]
   {:pre [(or (nil? tx-isolation-level)
              (get isolation-levels tx-isolation-level))]}
-  (retry-sql 5
+  #_(retry-sql 5
              (sql/with-connection db-spec
                (when-let [isolation-level (get isolation-levels tx-isolation-level)]
                  (.setTransactionIsolation (:connection jint/*db*) isolation-level))
-               (sql/transaction (f)))))
+               (sql/transaction (f))))
+  (sql/with-connection db-spec
+               (when-let [isolation-level (get isolation-levels tx-isolation-level)]
+                 (.setTransactionIsolation (:connection jint/*db*) isolation-level))
+               (sql/transaction (f))))
 
 (defmacro with-transacted-connection'
   "Like `clojure.java.jdbc/with-connection`, except this automatically
@@ -360,12 +365,35 @@
     ;; ...aaand, create the pool.
     (BoneCPDataSource. config)))
 
+(defn make-connection-pool-hcp
+  [{:keys [classname subprotocol subname user username password
+           partition-conn-min partition-conn-max partition-count
+           stats log-statements log-slow-statements statements-cache-size
+           conn-max-age conn-lifetime conn-keep-alive read-only?]
+    :as   db}]
+  (let [datasource-options {:read-only          read-only?
+                            :initialization-fail-fast true
+                            :connection-timeout 30000
+                            :validation-timeout 5000
+                            :idle-timeout       600000
+                            :max-lifetime       1800000
+                            :minimum-idle       8
+                            :maximum-pool-size  10
+                            :pool-name          "db-pool"
+                            :adapter            "postgresql"
+                            :username           "puppetdb"
+                            :password           "puppetdb"
+                            :database-name      "puppetdb"
+                            :server-name        "localhost"
+                            :port-number        5432}]
+    (hcp/make-datasource datasource-options)))
+
 (defn pooled-datasource
   "Given a database connection attribute map, return a JDBC datasource
   compatible with clojure.java.jdbc that is backed by a connection
   pool."
   [options]
-  {:datasource (make-connection-pool options)})
+  {:datasource (make-connection-pool-hcp options)})
 
 (defn in-clause
   "Create a prepared statement in clause, with a ? for every item in coll"

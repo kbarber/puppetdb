@@ -76,7 +76,11 @@
                  [fast-zip-visit "1.0.2"]
                  [robert/hooke "1.3.0"]
                  [honeysql "0.5.2"]
-                 [org.clojure/data.xml "0.0.8"]]
+                 [org.clojure/data.xml "0.0.8"]
+
+                 ;; Work for hikaricp
+                 [com.zaxxer/HikariCP-java6 "2.3.7"]
+                 [org.tobereplaced/lettercase "1.0.0"]]
 
   :jvm-opts ["-XX:MaxPermSize=128M"]
 
