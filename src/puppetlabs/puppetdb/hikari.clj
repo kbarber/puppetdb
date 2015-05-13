@@ -12,7 +12,8 @@
    :max-lifetime       1800000
    :minimum-idle       10
    :maximum-pool-size  10
-   :initialization-fail-fast false})
+   :initialization-fail-fast false
+   :register-mbeans    true})
 
 (def ^{:private true} adapters-to-datasource-class-names
   {"derby"          "org.apache.derby.jdbc.ClientDataSource"
@@ -68,6 +69,7 @@
    :maximum-pool-size  IntGte1
    :adapter            AdaptersList
    :initialization-fail-fast s/Bool
+   :register-mbeans    s/Bool
    s/Keyword           s/Any})
 
 (defn- exception-message
@@ -110,6 +112,7 @@
                 password
                 pool-name
                 read-only
+                register-mbeans
                 username]} options
         datasource-class-name (get
                                adapters-to-datasource-class-names
@@ -125,7 +128,8 @@
       (.setMinimumIdle         minimum-idle)
       (.setMaximumPoolSize     maximum-pool-size)
       (.setDataSourceClassName datasource-class-name)
-      (.setInitializationFailFast initialization-fail-fast))
+      (.setInitializationFailFast initialization-fail-fast)
+      (.setRegisterMbeans      register-mbeans))
     ;; Set optional properties
     (if username (.setUsername config username))
     (if password (.setPassword config password))

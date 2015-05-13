@@ -372,7 +372,7 @@
            conn-max-age conn-lifetime conn-keep-alive read-only?]
     :as   db}]
   (let [datasource-options {:read-only          read-only?
-                            :initialization-fail-fast true
+                            :initialization-fail-fast false
                             :connection-timeout 30000
                             :validation-timeout 5000
                             :idle-timeout       600000
