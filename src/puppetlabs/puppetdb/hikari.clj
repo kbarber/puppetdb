@@ -1,17 +1,12 @@
 (ns puppetlabs.puppetdb.hikari
-  (:import com.zaxxer.hikari.HikariConfig com.zaxxer.hikari.HikariDataSource)
+  (:import com.zaxxer.hikari.HikariConfig
+           com.zaxxer.hikari.HikariDataSource)
   (:require [org.tobereplaced.lettercase :refer [mixed-name]]
             [schema.core :as s]))
 
 (def default-datasource-options
   {:auto-commit        false
    :read-only          false
-   :connection-timeout 30000
-   :validation-timeout 5000
-   :idle-timeout       600000
-   :max-lifetime       1800000
-   :minimum-idle       10
-   :maximum-pool-size  10
    :initialization-fail-fast false
    :register-mbeans    true})
 
@@ -59,17 +54,20 @@
   (s/both s/Int (s/pred gte-1000? 'gte-1000?)))
 
 (def ConfigurationOptions
-  {:auto-commit        s/Bool
-   :read-only          s/Bool
-   :connection-timeout IntGte1000
-   :validation-timeout IntGte1000
-   :idle-timeout       IntGte0
-   :max-lifetime       IntGte0
-   :minimum-idle       IntGte0
-   :maximum-pool-size  IntGte1
-   :adapter            AdaptersList
+  {#_#_:adapter            AdaptersList
+   :auto-commit        s/Bool
+   (s/optional-key :connection-timeout) IntGte1000
+   (s/optional-key :idle-timeout)       IntGte0
    :initialization-fail-fast s/Bool
+   :jdbc-url           s/Str
+   (s/optional-key :max-lifetime)       IntGte0
+   (s/optional-key :maximum-pool-size)  IntGte1
+   (s/optional-key :minimum-idle)       IntGte0
+   ;; TODO: maybe we just work this out from app-name?
+   :pool-name          s/Str
+   :read-only          s/Bool
    :register-mbeans    s/Bool
+   (s/optional-key :validation-timeout) IntGte1000
    s/Keyword           s/Any})
 
 (defn- exception-message
@@ -85,7 +83,9 @@
 (defn validate-options
   ""
   [options]
-  (try
+  (s/validate ConfigurationOptions (merge default-datasource-options options))
+  ;; TODO: commenting this out for now so I can see the underlying schema failure properly
+  #_(try
     (s/validate ConfigurationOptions (merge default-datasource-options options))
     (catch clojure.lang.ExceptionInfo e
       (throw
@@ -103,9 +103,9 @@
                 auto-commit
                 connection-test-query
                 connection-timeout
-                validation-timeout
                 idle-timeout
                 initialization-fail-fast
+                jdbc-url
                 max-lifetime
                 maximum-pool-size
                 minimum-idle
@@ -113,7 +113,8 @@
                 pool-name
                 read-only
                 register-mbeans
-                username]} options
+                username
+                validation-timeout]} options
         datasource-class-name (get
                                adapters-to-datasource-class-names
                                adapter)]
@@ -121,20 +122,21 @@
     (doto config
       (.setAutoCommit          auto-commit)
       (.setReadOnly            read-only)
-      (.setConnectionTimeout   connection-timeout)
-      (.setValidationTimeout   validation-timeout)
-      (.setIdleTimeout         idle-timeout)
-      (.setMaxLifetime         max-lifetime)
-      (.setMinimumIdle         minimum-idle)
-      (.setMaximumPoolSize     maximum-pool-size)
-      (.setDataSourceClassName datasource-class-name)
+      #_(.setDataSourceClassName datasource-class-name)
       (.setInitializationFailFast initialization-fail-fast)
       (.setRegisterMbeans      register-mbeans))
     ;; Set optional properties
-    (if username (.setUsername config username))
-    (if password (.setPassword config password))
-    (if pool-name (.setPoolName config pool-name))
-    (if connection-test-query (.setConnectionTestQuery config connection-test-query))
+    (when idle-timeout (.setIdleTimeout config idle-timeout))
+    (when max-lifetime (.setMaxLifetime config max-lifetime))
+    (when minimum-idle (.setMinimumIdle config minimum-idle))
+    (when maximum-pool-size (.setMaximumPoolSize config maximum-pool-size))
+    (when validation-timeout (.setValidationTimeout config validation-timeout))
+    (when connection-timeout (.setConnectionTimeout config connection-timeout))
+    (when username (.setUsername config username))
+    (when password (.setPassword config password))
+    (when pool-name (.setPoolName config pool-name))
+    (when connection-test-query (.setConnectionTestQuery config connection-test-query))
+    (when jdbc-url (.setJdbcUrl config jdbc-url))
     ;; Set datasource-specific properties
     (doseq [[k v] not-core-options]
       (add-datasource-property config k v))

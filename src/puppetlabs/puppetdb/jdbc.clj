@@ -373,19 +373,15 @@
     :as   db}]
   (let [datasource-options {:read-only          read-only?
                             :initialization-fail-fast false
-                            :connection-timeout 30000
-                            :validation-timeout 5000
-                            :idle-timeout       600000
-                            :max-lifetime       1800000
+                            :max-lifetime       conn-lifetime
+                            ;; TODO: work these out from partition settings?
                             :minimum-idle       8
                             :maximum-pool-size  10
-                            :pool-name          "db-pool"
-                            :adapter            "postgresql"
-                            :username           "puppetdb"
-                            :password           "puppetdb"
-                            :database-name      "puppetdb"
-                            :server-name        "localhost"
-                            :port-number        5432}]
+                            ;; TODO: work out a good way of differentiating the ro from rw pools
+                            :pool-name          "puppetdb"
+                            :username           (or user username)
+                            :password           password
+                            :jdbc-url           (str "jdbc:" subprotocol ":" subname)}]
     (hcp/make-datasource datasource-options)))
 
 (defn pooled-datasource
