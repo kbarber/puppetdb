@@ -87,7 +87,7 @@
    :stats Boolean
    :log-statements Boolean
    :statements-cache-size s/Int
-   (s/optional-key :conn-lifetime) (s/maybe Minutes)
+   (s/optional-key :conn-lifetime) (s/maybe s/Int)
    (s/optional-key :username) String
    (s/optional-key :user) String
    (s/optional-key :password) String

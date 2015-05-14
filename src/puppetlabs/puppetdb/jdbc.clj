@@ -1,15 +1,11 @@
 (ns puppetlabs.puppetdb.jdbc
   "Database utilities"
-  (:import (com.jolbox.bonecp BoneCPDataSource BoneCPConfig)
-           (java.util.concurrent TimeUnit))
   (:require [clojure.java.jdbc :as sql]
             [clojure.java.jdbc.internal :as jint]
             [clojure.string :as string]
             [clojure.tools.logging :as log]
-            [puppetlabs.puppetdb.hikari :as hcp]
             [puppetlabs.kitchensink.core :as kitchensink]
             [clojure.string :as str]
-            [puppetlabs.puppetdb.time :as pl-time]
             [puppetlabs.puppetdb.jdbc.internal :refer :all]
             [puppetlabs.puppetdb.schema :as pls]
             [schema.core :as s]
@@ -327,69 +323,6 @@
   [sql params rs-var & body]
   `(let [func# (fn [~rs-var] (do ~@body))]
      (with-query-results-cursor* func# ~sql ~params)))
-
-(defn make-connection-pool
-  "Create a new database connection pool"
-  [{:keys [classname subprotocol subname user username password
-           partition-conn-min partition-conn-max partition-count
-           stats log-statements log-slow-statements statements-cache-size
-           conn-max-age conn-lifetime conn-keep-alive read-only?]
-    :as   db}]
-  (let [;; Load the database driver class explicitly, to avoid jar load ordering
-        ;; issues.
-        _ (Class/forName classname)
-        log-slow-statements-duration (pl-time/to-seconds log-slow-statements)
-        config          (doto (new BoneCPConfig)
-                          (.setDefaultAutoCommit false)
-                          (.setLazyInit true)
-                          (.setMinConnectionsPerPartition partition-conn-min)
-                          (.setMaxConnectionsPerPartition partition-conn-max)
-                          (.setPartitionCount partition-count)
-                          (.setConnectionTestStatement "begin; select 1; commit;")
-                          (.setStatisticsEnabled stats)
-                          (.setIdleMaxAgeInMinutes (pl-time/to-minutes conn-max-age))
-                          (.setIdleConnectionTestPeriodInMinutes (pl-time/to-minutes conn-keep-alive))
-                          ;; paste the URL back together from parts.
-                          (.setJdbcUrl (str "jdbc:" subprotocol ":" subname))
-                          (.setConnectionHook (connection-hook log-statements log-slow-statements-duration))
-                          (.setStatementsCacheSize statements-cache-size)
-                          (.setDefaultReadOnly read-only?))
-        user (or user username)]
-    ;; configurable without default
-    (when user (.setUsername config (str user)))
-    (when password (.setPassword config (str password)))
-    (when conn-lifetime (.setMaxConnectionAge config (pl-time/to-minutes conn-lifetime) TimeUnit/MINUTES))
-    (when log-statements (.setLogStatementsEnabled config log-statements))
-
-    (.setQueryExecuteTimeLimit config log-slow-statements-duration (TimeUnit/SECONDS))
-    ;; ...aaand, create the pool.
-    (BoneCPDataSource. config)))
-
-(defn make-connection-pool-hcp
-  [{:keys [classname subprotocol subname user username password
-           partition-conn-min partition-conn-max partition-count
-           stats log-statements log-slow-statements statements-cache-size
-           conn-max-age conn-lifetime conn-keep-alive read-only?]
-    :as   db}]
-  (let [datasource-options {:read-only          read-only?
-                            :initialization-fail-fast false
-                            :max-lifetime       conn-lifetime
-                            ;; TODO: work these out from partition settings?
-                            :minimum-idle       8
-                            :maximum-pool-size  10
-                            ;; TODO: work out a good way of differentiating the ro from rw pools
-                            :pool-name          "puppetdb"
-                            :username           (or user username)
-                            :password           password
-                            :jdbc-url           (str "jdbc:" subprotocol ":" subname)}]
-    (hcp/make-datasource datasource-options)))
-
-(defn pooled-datasource
-  "Given a database connection attribute map, return a JDBC datasource
-  compatible with clojure.java.jdbc that is backed by a connection
-  pool."
-  [options]
-  {:datasource (make-connection-pool-hcp options)})
 
 (defn in-clause
   "Create a prepared statement in clause, with a ? for every item in coll"

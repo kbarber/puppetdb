@@ -46,7 +46,6 @@
             [puppetlabs.puppetdb.command :refer [enqueue-command!]]
             [puppetlabs.puppetdb.command.dlo :as dlo]
             [puppetlabs.puppetdb.query.population :as pop]
-            [puppetlabs.puppetdb.jdbc :as pl-jdbc]
             [puppetlabs.puppetdb.mq :as mq]
             [clojure.java.jdbc :as sql]
             [clojure.tools.logging :as log]
@@ -60,6 +59,7 @@
             [clojure.java.io :refer [file]]
             [clj-time.core :refer [ago]]
             [overtone.at-at :refer [mk-pool interspaced]]
+            [puppetlabs.puppetdb.hikari :as hcp]
             [puppetlabs.puppetdb.time :refer [to-seconds to-millis parse-period format-period period?]]
             [puppetlabs.puppetdb.jdbc :refer [with-transacted-connection]]
             [puppetlabs.puppetdb.scf.migrate :refer [migrate! indexes!]]
@@ -243,8 +243,10 @@
         {:keys [certificate-whitelist
                 disable-update-checking]} puppetdb
         url-prefix (get-route service)
-        write-db (pl-jdbc/pooled-datasource database)
-        read-db (pl-jdbc/pooled-datasource (assoc read-database :read-only? true))
+        write-db (hcp/pooled-datasource (assoc database :pool-name "puppetdb"))
+        read-db (hcp/pooled-datasource (-> read-database
+                                           (assoc :read-only? true)
+                                           (assoc :pool-name "puppetdb-readonly")))
         mq-dir (str (file vardir "mq"))
         discard-dir (file mq-dir "discarded")
         mq-connection-str (add-max-framesize max-frame-size mq-addr)
