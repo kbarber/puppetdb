@@ -82,7 +82,8 @@
                  [org.clojure/data.xml "0.0.8"]
                  [com.rpl/specter "0.5.7"]
                  [org.clojure/core.async "0.1.346.0-17112a-alpha"]
-                 [puppetlabs/http-client "0.4.4"]]
+                 [puppetlabs/http-client "0.4.4"]
+                 [instaparse "1.4.1"]]
 
   :jvm-opts ~pdb-jvm-opts
 
