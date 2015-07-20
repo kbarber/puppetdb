@@ -1,36 +1,73 @@
-query = bracketexp;
-
-(*
-bracketexp = [lbracket], [<whitespace>], expression, [<whitespace>], [rbacket];
-expression = comparison, [{[<whitespace>], boolean, [<whitespace>], comparison}];
-comparison = [lbracket], field, [<whitespace>], conditional, [<whitespace>], value, [rbracket];
-*)
-
-expression  = expression1 { [<whitespace>], 'or', [<whitespace>], expression1 }
-expression1 = expression2 (* TODO: expand the rest *)
-
-field       = #'[a-zA-Z_]+';
-value       = valuestring | integer | real;
-valuestring = #'[a-zA-Z_]+';
-conditional = '==' | '!=' | '>=' | '<=' | '<' | '>' | '=~' | '!~' | 'in';
-boolean     = 'and' | 'or';
-not         = '!' | 'not'; (* TODO: determine if we want a not here *)
-
-(* General *)
-whitespace = #'\s+';
-lbracket   = '(';
-rbracket   = ')':
-
-(* Numbers *)
-integer = ["-"], digit, {digit};
-real    = ["-"], digit, {digit}, ["."], digit, {digit}, ["E", digit, {digit}];
-digit   = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9";
+query = expression;
 
 (* TODO: order by *)
 (* TODO: limit, offset *)
 (* TODO: include_total *)
-(* TODO: aggregate functions *)
-(* TODO: extract, in *)
+(* TODO: group_by *)
+(* TODO: from *)
+(* TODO: extract - projection *)
 (* TODO: subqueries *)
-(* TODO: ~> *)
-(* TODO: null? *)
+(* TODO: aggregate functions *)
+
+(* Expressions - the number after expr is the order of precedence *)
+expression = expr4;
+expr4      = expr3 { [<whitespace>], or, [<whitespace>], expr4 };
+expr3      = expr2 { [<whitespace>], and, [<whitespace>], expr3 };
+expr2      = {[ not ] expr2 } | expr1;
+expr1      = { lbracket, expression, rbracket } | condexpression;
+
+(* Conditional expression *)
+(* TODO: '~>' and 'null?' and 'in' *)
+condexpression   = field, [<whitespace>], (condexpregexp | condexpnumber | condexpmatch);
+<condexpregexp> = condregexp, [<whitespace>], valueregexp;
+<condexpnumber>  = condnumber, [<whitespace>], valuenumber;
+<condexpmatch>   = condmatch, [<whitespace>], valuematch;
+
+(* Conditional expression parts *)
+field       = #'[a-zA-Z_]+';
+condregexp  = '!~' | '=~';
+condnumber  = '>=' | '<=' | '<' | '>';
+condmatch   = '==' | '!=';
+valueregexp = regexp;
+valuenumber = integer | real;
+valuematch  = string | integer | real | boolean;
+
+(* Boolean operators *)
+(* TODO: do we want case insensivity here for 'and', 'or', and 'not' *)
+and = [<whitespace>], <'and'>, [<whitespace>];
+or  = [<whitespace>], <'or'>, [<whitespace>];
+not = [<whitespace>], <'!'>, [<whitespace>]; (* TODO: determine if we want 'not' here also *)
+
+(* Regexp strings *)
+(* TODO: regexp should accept almost anything but a bare /, we should test regexp with / in it, to ensure it fails *)
+regexp = <regexpquote>, stringcomponent, <regexpquote>
+<regexpquote> = "/"
+
+(* Value strings *)
+(* TODO: strings should accept almost anything but a bare quote, we should test valuestring with ' or " in it, ensure it fails  *)
+string = (<singlequote>, stringcomponent, <singlequote>) | (<doublequote>, stringcomponent, <doublequote>);
+<stringcomponent> = #'[a-zA-Z_]+';
+
+(* Quotes *)
+<singlequote> = "'";
+<doublequote> = "\"";
+
+(* Grouping *)
+<lbracket> = [<whitespace>], '(', [<whitespace>];
+<rbracket> = [<whitespace>], ')', [<whitespace>];
+
+(* Booleans *)
+boolean = true | false;
+true = <"true">;
+false = <"false">;
+
+(* Numbers *)
+integer    = [negative], digits;
+real       = [negative], digits, ".", digits, [exp];
+exp        = <"E" | "e">, [negative], digits;
+<digits>   = #"[0-9]+";
+<negative> = "-";
+
+(* Whitespace *)
+<whitespace> = #'\s+';
+
