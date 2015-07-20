@@ -1,22 +1,36 @@
 query = bracketexp;
 
-bracketexp = '(', [<whitespace>], expression, [<whitespace>], ')' | expression;
+(*
+bracketexp = [lbracket], [<whitespace>], expression, [<whitespace>], [rbacket];
 expression = comparison, [{[<whitespace>], boolean, [<whitespace>], comparison}];
-comparison = field, [<whitespace>], conditional, [<whitespace>], value;
+comparison = [lbracket], field, [<whitespace>], conditional, [<whitespace>], value, [rbracket];
+*)
 
-whitespace  = #'\s+';
+expression  = expression1 { [<whitespace>], 'or', [<whitespace>], expression1 }
+expression1 = expression2 (* TODO: expand the rest *)
+
 field       = #'[a-zA-Z_]+';
 value       = valuestring | integer | real;
 valuestring = #'[a-zA-Z_]+';
 conditional = '==' | '!=' | '>=' | '<=' | '<' | '>' | '=~' | '!~' | 'in';
 boolean     = 'and' | 'or';
-not         = '!' | 'not';
+not         = '!' | 'not'; (* TODO: determine if we want a not here *)
 
-! and or
-! && ||
-not and or
+(* General *)
+whitespace = #'\s+';
+lbracket   = '(';
+rbracket   = ')':
 
 (* Numbers *)
 integer = ["-"], digit, {digit};
 real    = ["-"], digit, {digit}, ["."], digit, {digit}, ["E", digit, {digit}];
 digit   = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9";
+
+(* TODO: order by *)
+(* TODO: limit, offset *)
+(* TODO: include_total *)
+(* TODO: aggregate functions *)
+(* TODO: extract, in *)
+(* TODO: subqueries *)
+(* TODO: ~> *)
+(* TODO: null? *)
