@@ -183,6 +183,12 @@
     (is (insta/failure? (insta/parse parse "/asdf/asdf/" :start :regexp)))
     (is (insta/failure? (insta/parse parse "'asdf'" :start :regexp))))
 
+  (testing "stringwithoutregexpquote"
+    (is (= (parse "asdf" :start :stringwithoutregexpquote)
+           ["asdf"]))
+
+    (is (insta/failure? (insta/parse parse "asdf/asdf" :start :stringwithoutregexpquote))))
+
   (testing "regexpquote"
     (is (= (parse "/" :start :regexpquote)
            ["/"]))
@@ -198,19 +204,24 @@
     (is (= (parse "\"asdf\"" :start :string)
            [:string "asdf"]))
     (is (= (parse "\"as\\\"df\"" :start :string)
-           [:string "as\"df"]))
+           [:string "as\\\"df"]))
 
     (is (insta/failure? (insta/parse parse "'asdf\"" :start :string)))
     (is (insta/failure? (insta/parse parse "\"asdf'" :start :string)))
     (is (insta/failure? (insta/parse parse "'asd'asdf'" :start :string))))
 
-  (testing "stringcomponent"
-    (is (= (parse "asdf" :start :stringcomponent)
+  (testing "stringwithoutdoublequotes"
+    (is (= (parse "asdf" :start :stringwithoutdoublequotes)
            ["asdf"]))
 
-    (is (insta/failure? (insta/parse parse "asdf\"asdf" :start :stringcomponent)))))
+    (is (insta/failure? (insta/parse parse "asdf\"asdf" :start :stringwithoutdoublequotes))))
 
-(deftest test-quotes
+  (testing "stringwithoutsinglequotes"
+    (is (= (parse "asdf" :start :stringwithoutsinglequotes)
+           ["asdf"]))
+
+    (is (insta/failure? (insta/parse parse "asdf'asdf" :start :stringwithoutsinglequotes))))
+
   (testing "singlequote"
     (is (= (parse "'" :start :singlequote)
            ["'"]))

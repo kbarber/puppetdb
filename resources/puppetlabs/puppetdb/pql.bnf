@@ -39,16 +39,14 @@ or  = [<whitespace>], <'or'>, [<whitespace>];
 not = [<whitespace>], <'!'>, [<whitespace>]; (* TODO: determine if we want 'not' here also *)
 
 (* Regexp strings *)
-(* TODO: regexp should accept almost anything but a bare /, we should test regexp with / in it, to ensure it fails *)
-regexp = <regexpquote>, stringcomponent, <regexpquote>
+regexp = <regexpquote>, stringwithoutregexpquote, <regexpquote>
+<stringwithoutregexpquote> = #'(?:[^/\\]|\\.)*';
 <regexpquote> = "/"
 
 (* Value strings *)
-(* TODO: strings should accept almost anything but a bare quote, we should test valuestring with ' or " in it, ensure it fails  *)
-string = (<singlequote>, stringcomponent, <singlequote>) | (<doublequote>, stringcomponent, <doublequote>);
-<stringcomponent> = #'[a-zA-Z_]+';
-
-(* Quotes *)
+string = (<singlequote>, stringwithoutsinglequotes, <singlequote>) | (<doublequote>, stringwithoutdoublequotes, <doublequote>);
+<stringwithoutdoublequotes> = #'(?:[^"\\]|\\.)*';
+<stringwithoutsinglequotes> = #'(?:[^\'\\]|\\.)*';
 <singlequote> = "'";
 <doublequote> = "\"";
 
