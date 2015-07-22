@@ -4,4 +4,4 @@
 
 (defn pql->ast
   [pql]
-  (transform (parse pql)))
+  (first (transform (parse pql))))

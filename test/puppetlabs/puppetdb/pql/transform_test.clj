@@ -2,6 +2,9 @@
   (:require [clojure.test :refer :all]
             [puppetlabs.puppetdb.pql.transform :refer :all]))
 
+(deftest test-not
+  (is (= (transform [:not]) :not)))
+
 (deftest test-transform-condexpression
   (is (= (transform-condexpression "a" "==" 1) ["==" "a" 1])))
 (deftest test-condexpression

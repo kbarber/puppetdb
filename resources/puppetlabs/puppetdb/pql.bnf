@@ -1,4 +1,4 @@
-query = expression;
+<query> = expression;
 
 (* TODO: order by *)
 (* TODO: limit, offset *)
@@ -10,11 +10,11 @@ query = expression;
 (* TODO: aggregate functions *)
 
 (* Expressions - the number after expr is the order of precedence *)
-expression = expr4;
+<expression> = expr4;
 expr4      = expr3 { [<whitespace>], or, [<whitespace>], expr4 };
 expr3      = expr2 { [<whitespace>], and, [<whitespace>], expr3 };
 expr2      = {[ not ] expr2 } | expr1;
-expr1      = { lbracket, expression, rbracket } | condexpression;
+expr1      = { <lbracket>, expression, <rbracket> } | condexpression;
 
 (* Conditional expression *)
 (* TODO: '~>' and 'null?' and 'in' *)
@@ -33,9 +33,8 @@ condexpression   = field, [<whitespace>], (condexpregexp | condexpnumber | conde
 <valuematch>  = string | integer | real | boolean;
 
 (* Boolean operators *)
-(* TODO: do we want case insensivity here for 'and', 'or', and 'not' *)
-and = [<whitespace>], <'and'>, [<whitespace>];
-or  = [<whitespace>], <'or'>, [<whitespace>];
+<and> = [<whitespace>], <'and'>, [<whitespace>];
+<or>  = [<whitespace>], <'or'>, [<whitespace>];
 not = [<whitespace>], <'!'>, [<whitespace>]; (* TODO: determine if we want 'not' here also *)
 
 (* Regexp strings *)
