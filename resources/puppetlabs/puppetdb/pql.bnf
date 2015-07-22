@@ -24,13 +24,13 @@ condexpression   = field, [<whitespace>], (condexpregexp | condexpnumber | conde
 <condexpmatch>   = condmatch, [<whitespace>], valuematch;
 
 (* Conditional expression parts *)
-field       = #'[a-zA-Z_]+';
-condregexp  = '!~' | '=~';
-condnumber  = '>=' | '<=' | '<' | '>';
-condmatch   = '==' | '!=';
-valueregexp = regexp;
-valuenumber = integer | real;
-valuematch  = string | integer | real | boolean;
+<field>       = #'[a-zA-Z_]+';
+<condregexp>  = '!~' | '=~';
+<condnumber>  = '>=' | '<=' | '<' | '>';
+<condmatch>   = '==' | '!=';
+<valueregexp> = regexp;
+<valuenumber> = integer | real;
+<valuematch>  = string | integer | real | boolean;
 
 (* Boolean operators *)
 (* TODO: do we want case insensivity here for 'and', 'or', and 'not' *)
