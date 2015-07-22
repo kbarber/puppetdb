@@ -8,15 +8,146 @@
 
 (deftest test-expressions
   (is (= (parse "a == 1" :start :expression)
-         [:expression]))
+         [:expression
+          [:expr4
+           [:expr3
+            [:expr2
+             [:expr1
+              [:condexpression
+               [:field "a"]
+               [:condmatch "=="]
+               [:valuematch [:integer "1"]]]]]]]]))
   (is (= (parse "a == 1 and b == 2" :start :expression)
-         [:expression]))
+         [:expression
+          [:expr4
+           [:expr3
+            [:expr2
+             [:expr1
+              [:condexpression
+               [:field "a"]
+               [:condmatch "=="]
+               [:valuematch [:integer "1"]]]]]
+            [:and]
+            [:expr3
+             [:expr2
+              [:expr1
+               [:condexpression
+                [:field "b"]
+                [:condmatch "=="]
+                [:valuematch [:integer "2"]]]]]]]]]))
   (is (= (parse "c == 3 or d == 4 and a == 1" :start :expression)
-         [:expression]))
+         [:expression
+          [:expr4
+           [:expr3
+            [:expr2
+             [:expr1
+              [:condexpression
+               [:field "c"]
+               [:condmatch "=="]
+               [:valuematch [:integer "3"]]]]]]
+           [:or]
+           [:expr4
+            [:expr3
+             [:expr2
+              [:expr1
+               [:condexpression
+                [:field "d"]
+                [:condmatch "=="]
+                [:valuematch [:integer "4"]]]]]
+             [:and]
+             [:expr3
+              [:expr2
+               [:expr1
+                [:condexpression
+                 [:field "a"]
+                 [:condmatch "=="]
+                 [:valuematch [:integer "1"]]]]]]]]]]))
   (is (= (parse "c == 3 or d == 4 and a == 1 or b == 2" :start :expression)
-         [:expression]))
+         [:expression
+          [:expr4
+           [:expr3
+            [:expr2
+             [:expr1
+              [:condexpression
+               [:field "c"]
+               [:condmatch "=="]
+               [:valuematch [:integer "3"]]]]]]
+           [:or]
+           [:expr4
+            [:expr3
+             [:expr2
+              [:expr1
+               [:condexpression
+                [:field "d"]
+                [:condmatch "=="]
+                [:valuematch [:integer "4"]]]]]
+             [:and]
+             [:expr3
+              [:expr2
+               [:expr1
+                [:condexpression
+                 [:field "a"]
+                 [:condmatch "=="]
+                 [:valuematch [:integer "1"]]]]]]]]
+           [:or]
+           [:expr4
+            [:expr3
+             [:expr2
+              [:expr1
+               [:condexpression
+                [:field "b"]
+                [:condmatch "=="]
+                [:valuematch [:integer "2"]]]]]]]]]))
   (is (= (parse "(c == 3 or d == 4) and (a == 1 or b == 2)" :start :expression)
-         [:expression]))
+         [:expression
+          [:expr4
+           [:expr3
+            [:expr2
+             [:expr1
+              "("
+              [:expression
+               [:expr4
+                [:expr3
+                 [:expr2
+                  [:expr1
+                   [:condexpression
+                    [:field "c"]
+                    [:condmatch "=="]
+                    [:valuematch [:integer "3"]]]]]]
+                [:or]
+                [:expr4
+                 [:expr3
+                  [:expr2
+                   [:expr1
+                    [:condexpression
+                     [:field "d"]
+                     [:condmatch "=="]
+                     [:valuematch [:integer "4"]]]]]]]]]
+              ")"]]
+            [:and]
+            [:expr3
+             [:expr2
+              [:expr1
+               "("
+               [:expression
+                [:expr4
+                 [:expr3
+                  [:expr2
+                   [:expr1
+                    [:condexpression
+                     [:field "a"]
+                     [:condmatch "=="]
+                     [:valuematch [:integer "1"]]]]]]
+                 [:or]
+                 [:expr4
+                  [:expr3
+                   [:expr2
+                    [:expr1
+                     [:condexpression
+                      [:field "b"]
+                      [:condmatch "=="]
+                      [:valuematch [:integer "2"]]]]]]]]]
+                     ")"]]]]]]))
 
   (is (insta/failure? (insta/parse parse "foo and 'bar'" :start :expression))))
 
