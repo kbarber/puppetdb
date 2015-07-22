@@ -1,4 +1,4 @@
-(ns puppetlabs.puppetdb.pql
+(ns puppetlabs.puppetdb.pql.parser
   (:require [instaparse.core :as insta]))
 
 (def parse

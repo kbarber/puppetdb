@@ -1,6 +1,6 @@
-(ns puppetlabs.puppetdb.pql-test
+(ns puppetlabs.puppetdb.pql.parser-test
   (:require [clojure.test :refer :all]
-            [puppetlabs.puppetdb.pql :refer :all]
+            [puppetlabs.puppetdb.pql.parser :refer :all]
             [instaparse.core :as insta]))
 
 ;; These tests are ordered the same as in the EBNF file, so one can
@@ -413,6 +413,8 @@
            [:real "1" "." "1" [:exp "1"]]))
     (is (= (parse "123.123E123" :start :real)
            [:real "123" "." "123" [:exp "123"]]))
+    (is (= (parse "-1.1" :start :real)
+           [:real "-" "1" "." "1"]))
 
     (is (insta/failure? (insta/parse parse "1." :start :real)))
     (is (insta/failure? (insta/parse parse ".1" :start :real)))
