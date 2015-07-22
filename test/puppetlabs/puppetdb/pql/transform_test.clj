@@ -2,6 +2,9 @@
   (:require [clojure.test :refer :all]
             [puppetlabs.puppetdb.pql.transform :refer :all]))
 
+(deftest test-transform-condexpression
+  (is (= (transform-condexpression "a" "==" 1) ["==" "a" 1])))
+
 (deftest test-transform-regexp
   (is (= (transform-regexp "foo") "foo")))
 
@@ -26,6 +29,9 @@
   (is (= (transform-exp "123") "E123"))
   (is (= (transform-exp "-" "123") "E-123")))
 
+
+(deftest test-condexpression
+  (is (= (transform [:condexpression "a" "==" [:integer "1"]]) ["==" "a" 1])))
 
 (deftest test-regexp
   (is (= (transform [:regexp "asdf"]) "asdf")))

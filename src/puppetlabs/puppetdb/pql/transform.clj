@@ -1,6 +1,10 @@
 (ns puppetlabs.puppetdb.pql.transform
   (:require [instaparse.core :as insta]))
 
+(defn transform-condexpression
+  [a b c]
+  [b a c])
+
 (defn transform-regexp
   ;; TODO: need to strip escaped backslashes
   [s]
@@ -35,12 +39,13 @@
    (str "E-" int)))
 
 (def transform-specification
-  {:regexp  transform-regexp
-   :string  transform-string
-   :boolean transform-boolean
-   :integer transform-integer
-   :real    transform-real
-   :exp     transform-exp})
+  {:condexpression transform-condexpression
+   :regexp         transform-regexp
+   :string         transform-string
+   :boolean        transform-boolean
+   :integer        transform-integer
+   :real           transform-real
+   :exp            transform-exp})
 
 (defn transform
   [tree]
