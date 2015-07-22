@@ -197,7 +197,7 @@
            [:string "as\\'df"]))
     (is (= (parse "\"asdf\"" :start :string)
            [:string "asdf"]))
-    (is (= (parse "\"as\"df\"" :start :string)
+    (is (= (parse "\"as\\\"df\"" :start :string)
            [:string "as\"df"]))
 
     (is (insta/failure? (insta/parse parse "'asdf\"" :start :string)))
