@@ -9,79 +9,92 @@
 (deftest test-expressions
   (is (= (parse "a == 1" :start :expression)
          [[:expr4
-            [:expr3
-             [:expr2
-              [:expr1
-               [:condexpression "a" "==" [:integer "1"]]]]]]]))
+           [:expr3
+            [:expr2
+             [:expr1
+              [:condexpression "a" "==" [:integer "1"]]]]]]]))
   (is (= (parse "!a == 1" :start :expression)
          [[:expr4
-            [:expr3
+           [:expr3
+            [:expr2
+             [:not]
              [:expr2
-              [:not]
-              [:expr2
-               [:expr1
-                [:condexpression "a" "==" [:integer "1"]]]]]]]]))
+              [:expr1
+               [:condexpression "a" "==" [:integer "1"]]]]]]]]))
   (is (= (parse "!(a == 1)" :start :expression)
          [[:expr4
-            [:expr3
+           [:expr3
+            [:expr2
+             [:not]
              [:expr2
-              [:not]
-              [:expr2
-               [:expr1]]
-              [:expr2
-               [:expr1
-                [:expr4
-                 [:expr3
-                  [:expr2
-                   [:expr1
-                    [:condexpression "a" "==" [:integer "1"]]]]]]]]]]]]))
+              [:expr1]]
+             [:expr2
+              [:expr1
+               [:expr4
+                [:expr3
+                 [:expr2
+                  [:expr1
+                   [:condexpression "a" "==" [:integer "1"]]]]]]]]]]]]))
   (is (= (parse "a == 1 and b == 2" :start :expression)
          [[:expr4
+           [:expr3
+            [:expr2
+             [:expr1
+              [:condexpression "a" "==" [:integer "1"]]]]
             [:expr3
              [:expr2
               [:expr1
-               [:condexpression "a" "==" [:integer "1"]]]]
-             [:expr3
-              [:expr2
-               [:expr1
-                [:condexpression "b" "==" [:integer "2"]]]]]]]]))
+               [:condexpression "b" "==" [:integer "2"]]]]]]]]))
   (is (= (parse "c == 3 or d == 4 and a == 1" :start :expression)
          [[:expr4
+           [:expr3
+            [:expr2
+             [:expr1
+              [:condexpression "c" "==" [:integer "3"]]]]]
+           [:expr4
             [:expr3
              [:expr2
               [:expr1
-               [:condexpression "c" "==" [:integer "3"]]]]]
-            [:expr4
+               [:condexpression "d" "==" [:integer "4"]]]]
              [:expr3
               [:expr2
                [:expr1
-                [:condexpression "d" "==" [:integer "4"]]]]
-              [:expr3
-               [:expr2
-                [:expr1
-                 [:condexpression "a" "==" [:integer "1"]]]]]]]]]))
+                [:condexpression "a" "==" [:integer "1"]]]]]]]]]))
   (is (= (parse "c == 3 or d == 4 and a == 1 or b == 2" :start :expression)
          [[:expr4
+           [:expr3
+            [:expr2
+             [:expr1
+              [:condexpression "c" "==" [:integer "3"]]]]]
+           [:expr4
             [:expr3
              [:expr2
               [:expr1
-               [:condexpression "c" "==" [:integer "3"]]]]]
-            [:expr4
+               [:condexpression "d" "==" [:integer "4"]]]]
              [:expr3
               [:expr2
                [:expr1
-                [:condexpression "d" "==" [:integer "4"]]]]
-              [:expr3
-               [:expr2
-                [:expr1
-                 [:condexpression "a" "==" [:integer "1"]]]]]]]
-            [:expr4
-             [:expr3
-              [:expr2
-               [:expr1
-                [:condexpression "b" "==" [:integer "2"]]]]]]]]))
+                [:condexpression "a" "==" [:integer "1"]]]]]]]
+           [:expr4
+            [:expr3
+             [:expr2
+              [:expr1
+               [:condexpression "b" "==" [:integer "2"]]]]]]]]))
   (is (= (parse "(c == 3 or d == 4) and (a == 1 or b == 2)" :start :expression)
          [[:expr4
+           [:expr3
+            [:expr2
+             [:expr1
+              [:expr4
+               [:expr3
+                [:expr2
+                 [:expr1
+                  [:condexpression "c" "==" [:integer "3"]]]]]
+               [:expr4
+                [:expr3
+                 [:expr2
+                  [:expr1
+                   [:condexpression "d" "==" [:integer "4"]]]]]]]]]
             [:expr3
              [:expr2
               [:expr1
@@ -89,25 +102,12 @@
                 [:expr3
                  [:expr2
                   [:expr1
-                   [:condexpression "c" "==" [:integer "3"]]]]]
+                   [:condexpression "a" "==" [:integer "1"]]]]]
                 [:expr4
                  [:expr3
                   [:expr2
                    [:expr1
-                    [:condexpression "d" "==" [:integer "4"]]]]]]]]]
-             [:expr3
-              [:expr2
-               [:expr1
-                [:expr4
-                 [:expr3
-                  [:expr2
-                   [:expr1
-                    [:condexpression "a" "==" [:integer "1"]]]]]
-                 [:expr4
-                  [:expr3
-                   [:expr2
-                    [:expr1
-                     [:condexpression "b" "==" [:integer "2"]]]]]]]]]]]]]))
+                    [:condexpression "b" "==" [:integer "2"]]]]]]]]]]]]]))
 
   (is (insta/failure? (insta/parse parse "foo and 'bar'" :start :expression))))
 
