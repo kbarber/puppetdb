@@ -2,6 +2,8 @@
   (:require [clojure.test :refer :all]
             [puppetlabs.puppetdb.pql.transform :refer :all]))
 
+;; TODO: need to test the rest of the transforms here
+
 (deftest test-not
   (is (= (transform [:not]) :not)))
 

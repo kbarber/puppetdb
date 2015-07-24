@@ -11,23 +11,26 @@
 
 (* Expressions - the number after expr is the order of precedence *)
 <expression> = expr4;
-expr4      = expr3 { [<whitespace>], or, [<whitespace>], expr4 };
-expr3      = expr2 { [<whitespace>], and, [<whitespace>], expr3 };
-expr2      = {[ not ] expr2 } | expr1;
-expr1      = { <lbracket>, expression, <rbracket> } | condexpression;
+expr4 = expr3 { [<whitespace>], or, [<whitespace>], expr4 };
+expr3 = expr2 { [<whitespace>], and, [<whitespace>], expr3 };
+expr2 = {[ not ] expr2 } | expr1;
+expr1 = { <lbracket>, expression, <rbracket> } | condexpression;
 
 (* Conditional expression *)
 (* TODO: '~>' and 'null?' and 'in' *)
-condexpression   = field, [<whitespace>], (condexpregexp | condexpnumber | condexpmatch);
+condexpression  = field, [<whitespace>], (condexpregexp | condexpnumber | condexpmatch);
 <condexpregexp> = condregexp, [<whitespace>], valueregexp;
-<condexpnumber>  = condnumber, [<whitespace>], valuenumber;
-<condexpmatch>   = condmatch, [<whitespace>], valuematch;
+<condexpnumber> = condnumber, [<whitespace>], valuenumber;
+<condexpmatch>  = condmatch, [<whitespace>], valuematch;
 
 (* Conditional expression parts *)
+(* TODO: we sometimes take arrays as values, we should look into this *)
 <field>       = #'[a-zA-Z_]+';
-<condregexp>  = '!~' | '=~';
+(* TODO: existing query lang uses ~, puppet dsl uses =~ *)
+<condregexp>  = '=~' | '~' | '=~';
 <condnumber>  = '>=' | '<=' | '<' | '>';
-<condmatch>   = '==' | '!=';
+(* TODO: puppet dsl uses ==, existing query lang uses = *)
+<condmatch>   = '==' | '!=' | '=';
 <valueregexp> = regexp;
 <valuenumber> = integer | real;
 <valuematch>  = string | integer | real | boolean;

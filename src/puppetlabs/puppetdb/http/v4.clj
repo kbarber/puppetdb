@@ -13,12 +13,16 @@
             [puppetlabs.puppetdb.http.resources :as resources]
             [puppetlabs.puppetdb.http.nodes :as nodes]
             [puppetlabs.puppetdb.http.environments :as envs]
+            [puppetlabs.puppetdb.http.index :as index]
             [net.cgrand.moustache :as moustache]))
 
 (def version :v4)
 
 (def v4-app
   (moustache/app
+   []
+   {:any (index/index-app version)}
+
    ["facts" &]
    {:any (facts/facts-app version)}
 
