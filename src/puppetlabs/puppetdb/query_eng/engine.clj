@@ -1075,8 +1075,8 @@
   Things like [node active] will be expanded into a full
   subquery (via the `in` and `extract` operators)"
   [user-query]
-  (:node (zip/post-order-transform (zip/tree-zipper user-query)
-                                   [expand-query-node validate-binary-operators])))
+  (log/spy (:node (zip/post-order-transform (zip/tree-zipper user-query)
+                                            [expand-query-node validate-binary-operators]))))
 
 (declare user-node->plan-node)
 
@@ -1125,7 +1125,9 @@
 (defn user-node->plan-node
   "Create a query plan for `node` in the context of the given query (as `query-rec`)"
   [query-rec node]
-  (cm/match [node]
+  ;; TODO: instaparse emits a PersistentList instead of a
+  ;; PersistentVector sometimes, and this match just skips over that.
+  (cm/match [(apply vector node)]
             [["=" column value]]
             (let [{:keys [type field]} (get-in query-rec [:projections column])]
               (case type
@@ -1232,7 +1234,7 @@
   "Converts the given `user-query` to a query plan that can later be converted into
   a SQL statement"
   [query-rec paging-options user-query]
-  (let [plan-node (user-node->plan-node query-rec user-query)
+  (let [plan-node (log/spy (user-node->plan-node query-rec (log/spy user-query)))
         projections (projectable-fields query-rec)]
     (if (instance? Query plan-node)
       plan-node

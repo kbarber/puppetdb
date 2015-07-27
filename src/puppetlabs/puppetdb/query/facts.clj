@@ -1,6 +1,7 @@
 (ns puppetlabs.puppetdb.query.facts
   "Fact query generation"
-  (:require [puppetlabs.puppetdb.cheshire :as json]
+  (:require [clojure.tools.logging :as log]
+            [puppetlabs.puppetdb.cheshire :as json]
             [puppetlabs.puppetdb.facts :as facts]
             [puppetlabs.puppetdb.query :as query]
             [puppetlabs.puppetdb.query.paging :as paging]

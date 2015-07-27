@@ -30,6 +30,7 @@ condexpression  = field, [<whitespace>], (condexpregexp | condexpnumber | condex
 <condregexp>  = '=~' | '~' | '=~';
 <condnumber>  = '>=' | '<=' | '<' | '>';
 (* TODO: puppet dsl uses ==, existing query lang uses = *)
+(* TODO: current query engine doesn't actually support !=, you use not wrapping in an equality match instead *)
 <condmatch>   = '==' | '!=' | '=';
 <valueregexp> = regexp;
 <valuenumber> = integer | real;
