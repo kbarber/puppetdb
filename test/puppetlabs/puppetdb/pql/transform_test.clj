@@ -2,13 +2,81 @@
   (:require [clojure.test :refer :all]
             [puppetlabs.puppetdb.pql.transform :refer :all]))
 
-;; TODO: need to test the rest of the transforms here
+(deftest test-transform-expr4
+  (is (= (transform-expr4 ["=" "a" 1]) ["=" "a" 1]))
+  (is (= (transform-expr4 ["=" "a" 1] ["=" "b" 2])
+         ["or"
+          ["=" "a" 1]
+          ["=" "b" 2]])))
+(deftest test-expr4
+  (is (= (transform [:expr4
+                     [:expr3
+                      [:expr2
+                       [:condexpression
+                        "a" "=" [:integer "1"]]]]])
+         ["=" "a" 1]))
+  (is (= (transform [:expr4
+                     [:expr3
+                      [:expr2
+                       [:condexpression
+                        "a" "=" [:integer "1"]]]]
+                     [:expr3
+                      [:expr2
+                       [:condexpression
+                        "b" "=" [:integer "2"]]]]])
+         ["or"
+          ["=" "a" 1]
+          ["=" "b" 2]])))
+
+(deftest test-transform-expr3
+  (is (= (transform-expr3 ["=" "a" 1]) ["=" "a" 1]))
+  (is (= (transform-expr3 ["=" "a" 1] ["=" "b" 2])
+         ["and"
+          ["=" "a" 1]
+          ["=" "b" 2]])))
+(deftest test-expr3
+  (is (= (transform [:expr3
+                     [:expr2
+                      [:condexpression
+                       "a" "=" [:integer "1"]]]])
+         ["=" "a" 1])
+      (= (transform [:expr3
+                     [:expr2
+                      [:condexpression
+                       "a" "=" [:integer "1"]]]
+                     [:expr2
+                      [:condexpression
+                       "b" "=" [:integer "2"]]]])
+         ["and"
+          ["=" "a" 1]
+          ["=" "b" 2]])))
+
+(deftest test-transform-expr2
+  (is (= (transform-expr2) nil))
+  (is (= (transform-expr2 ["=" "a" 1]) ["=" "a" 1]))
+  (is (= (transform-expr2 [:not] ["=" "a" 1]) ["not" ["=" "a" 1]]))
+  (is (= (transform-expr2 [:not] nil ["=" "a" 1]) ["not" ["=" "a" 1]])))
+(deftest test-expr2
+  (is (= (transform [:expr2]) nil))
+  (is (= (transform [:expr2
+                     ["=" "a" 1]])
+         ["=" "a" 1]))
+  (is (= (transform [:expr2
+                     [:not]
+                     [:condexpression "a" "=" [:integer 1]]])
+         ["not" ["=" "a" 1]]))
+  (is (= (transform [:expr2
+                     [:not]
+                     nil
+                     [:condexpression "a" "=" [:integer 1]]])
+         ["not" ["=" "a" 1]])))
 
 (deftest test-transform-condexpression
   (is (= (transform-condexpression "a" "~" "foo") ["~" "a" "foo"]))
   (is (= (transform-condexpression "a" "==" 1) ["==" "a" 1])))
 (deftest test-condexpression
-  (is (= (transform [:condexpression "a" "==" [:integer "1"]]) ["==" "a" 1])))
+  (is (= (transform [:condexpression "a" "==" [:integer "1"]]) ["==" "a" 1]))
+  (is (= (transform [:condexpression "a" "~" [:regexp "foo"]]) ["~" "a" "foo"])))
 
 (deftest test-transform-regexp
   (is (= (transform-regexp "foo") "foo")))
