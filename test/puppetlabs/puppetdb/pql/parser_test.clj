@@ -11,108 +11,90 @@
          [[:expr4
            [:expr3
             [:expr2
-             [:expr1
-              [:condexpression "a" "==" [:integer "1"]]]]]]]))
+             [:condexpression "a" "==" [:integer "1"]]]]]]))
   (is (= (parse "!a == 1" :start :expression)
          [[:expr4
            [:expr3
             [:expr2
              [:not]
              [:expr2
-              [:expr1
-               [:condexpression "a" "==" [:integer "1"]]]]]]]]))
+              [:condexpression "a" "==" [:integer "1"]]]]]]]))
   (is (= (parse "!(a == 1)" :start :expression)
          [[:expr4
            [:expr3
             [:expr2
              [:not]
+             [:expr2]
              [:expr2
-              [:expr1]]
-             [:expr2
-              [:expr1
-               [:expr4
-                [:expr3
-                 [:expr2
-                  [:expr1
-                   [:condexpression "a" "==" [:integer "1"]]]]]]]]]]]]))
+              [:expr4
+               [:expr3
+                [:expr2
+                 [:condexpression "a" "==" [:integer "1"]]]]]]]]]]))
   (is (= (parse "a == 1 and b == 2" :start :expression)
          [[:expr4
            [:expr3
             [:expr2
-             [:expr1
-              [:condexpression "a" "==" [:integer "1"]]]]
+             [:condexpression "a" "==" [:integer "1"]]]
             [:expr3
              [:expr2
-              [:expr1
-               [:condexpression "b" "==" [:integer "2"]]]]]]]]))
+              [:condexpression "b" "==" [:integer "2"]]]]]]]))
   (is (= (parse "c == 3 or d == 4 and a == 1" :start :expression)
          [[:expr4
            [:expr3
             [:expr2
-             [:expr1
-              [:condexpression "c" "==" [:integer "3"]]]]]
+             [:condexpression "c" "==" [:integer "3"]]]]
            [:expr4
             [:expr3
              [:expr2
-              [:expr1
-               [:condexpression "d" "==" [:integer "4"]]]]
+              [:condexpression "d" "==" [:integer "4"]]]
              [:expr3
               [:expr2
-               [:expr1
-                [:condexpression "a" "==" [:integer "1"]]]]]]]]]))
+               [:condexpression "a" "==" [:integer "1"]]]]]]]]))
   (is (= (parse "c == 3 or d == 4 and a == 1 or b == 2" :start :expression)
          [[:expr4
            [:expr3
             [:expr2
-             [:expr1
-              [:condexpression "c" "==" [:integer "3"]]]]]
+             [:condexpression "c" "==" [:integer "3"]]]]
            [:expr4
             [:expr3
              [:expr2
-              [:expr1
-               [:condexpression "d" "==" [:integer "4"]]]]
+              [:condexpression "d" "==" [:integer "4"]]]
              [:expr3
               [:expr2
-               [:expr1
-                [:condexpression "a" "==" [:integer "1"]]]]]]]
+               [:condexpression "a" "==" [:integer "1"]]]]]]
            [:expr4
             [:expr3
              [:expr2
-              [:expr1
-               [:condexpression "b" "==" [:integer "2"]]]]]]]]))
+              [:condexpression "b" "==" [:integer "2"]]]]]]]))
   (is (= (parse "(c == 3 or d == 4) and (a == 1 or b == 2)" :start :expression)
          [[:expr4
            [:expr3
             [:expr2
-             [:expr1
+             [:expr4
+              [:expr3
+               [:expr2
+                [:condexpression "c" "==" [:integer "3"]]]]
               [:expr4
                [:expr3
                 [:expr2
-                 [:expr1
-                  [:condexpression "c" "==" [:integer "3"]]]]]
-               [:expr4
-                [:expr3
-                 [:expr2
-                  [:expr1
-                   [:condexpression "d" "==" [:integer "4"]]]]]]]]]
+                 [:condexpression "d" "==" [:integer "4"]]]]]]]
             [:expr3
              [:expr2
-              [:expr1
+              [:expr4
+               [:expr3
+                [:expr2
+                 [:condexpression "a" "==" [:integer "1"]]]]
                [:expr4
                 [:expr3
                  [:expr2
-                  [:expr1
-                   [:condexpression "a" "==" [:integer "1"]]]]]
-                [:expr4
-                 [:expr3
-                  [:expr2
-                   [:expr1
-                    [:condexpression "b" "==" [:integer "2"]]]]]]]]]]]]]))
+                  [:condexpression "b" "==" [:integer "2"]]]]]]]]]]]))
 
   (is (insta/failure? (insta/parse parse "foo and 'bar'" :start :expression))))
 
 (deftest test-condexpression
   (testing "condexpression"
+    (is (= (parse "certname = 'foobar'" :start :condexpression)
+           [:condexpression "certname" "=" [:string "foobar"]]))
     (is (= (parse "certname == 'foobar'" :start :condexpression)
            [:condexpression "certname" "==" [:string "foobar"]]))
     (is (= (parse "certname =~ /foobar/" :start :condexpression)
@@ -120,7 +102,6 @@
     (is (= (parse "certname > 4" :start :condexpression)
            [:condexpression "certname" ">" [:integer "4"]]))
 
-    (is (insta/failure? (insta/parse parse "foo = 'bar'" :start :condexpression)))
     (is (insta/failure? (insta/parse parse "foo >= 'bar'" :start :condexpression)))
     (is (insta/failure? (insta/parse parse "foo >= true" :start :condexpression)))
     (is (insta/failure? (insta/parse parse "foo <= 'bar'" :start :condexpression)))
@@ -135,12 +116,13 @@
 
   (testing "condexpregexp"
     (is (= (parse "=~ /asdf/" :start :condexpregexp) ["=~" [:regexp "asdf"]]))
-    (is (= (parse "!~ /asdf/" :start :condexpregexp) ["!~" [:regexp "asdf"]]))
+    ;; TODO: there is no concept of !~ in our language today
+    #_(is (= (parse "!~ /asdf/" :start :condexpregexp) ["!~" [:regexp "asdf"]]))
 
     (is (insta/failure? (insta/parse parse "=~ 'bar'" :start :condexpregexp)))
     (is (insta/failure? (insta/parse parse "=~ 4" :start :condexpregexp)))
     (is (insta/failure? (insta/parse parse "=~ true" :start :condexpregexp)))
-    (is (insta/failure? (insta/parse parse "!~ 'bar'" :start :condexpregexp))))
+    #_(is (insta/failure? (insta/parse parse "!~ 'bar'" :start :condexpregexp))))
 
   (testing "condexpnumber"
     (is (= (parse ">= 4" :start :condexpnumber) [">=" [:integer "4"]]))
@@ -167,7 +149,8 @@
 
   (testing "condregexp"
     (is (= (parse "=~" :start :condregexp) ["=~"]))
-    (is (= (parse "!~" :start :condregexp) ["!~"]))
+    ;; TODO: there is no concept of !~ in our language today
+    #_(is (= (parse "!~" :start :condregexp) ["!~"]))
 
     (is (insta/failure? (insta/parse parse "=" :start :condregexp)))
     (is (insta/failure? (insta/parse parse "==" :start :condregexp))))
@@ -181,9 +164,9 @@
 
   (testing "condmatch"
     (is (= (parse "==" :start :condmatch) ["=="]))
+    (is (= (parse "=" :start :condmatch) ["="]))
     (is (= (parse "!=" :start :condmatch) ["!="]))
 
-    (is (insta/failure? (insta/parse parse "=" :start :condmatch)))
     (is (insta/failure? (insta/parse parse ">" :start :condmatch))))
 
   (testing "valueregexp"

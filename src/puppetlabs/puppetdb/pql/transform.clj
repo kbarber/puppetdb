@@ -14,26 +14,15 @@
   ([data & args] (concat ["and"] [data] args)))
 
 (defn transform-expr2
+  ;; Collapse with no args
+  ([])
   ;; Single arg? Just collapse the :expr2 and pass back the data,
   ;; closing the nesting.
   ([data] data)
   ;; Two args? This means :not [data] so convert it into a "not"
   ([_ data] ["not" data])
-  ;; Fall through
-  ;; TODO: the extra arg here is a null, its caused I think by nil
-  ;; expr1, if we don't expose expr1 this might go away?
+  ;; Three args? only use the third one for a "not"
   ([_ _ data] ["not" data]))
-
-(defn transform-expr1
-  ;; In certain cases expr1 can have no args, so just collapse
-  ([])
-  ;; TODO: Groups are more like markers, not even sure we need to expose
-  ;; these, since we just collapse them.
-  ([arg] arg))
-
-(defn transform-not
-  []
-  :not)
 
 (defn transform-condexpression
   [a b c]
@@ -76,8 +65,6 @@
   {:expr4          transform-expr4
    :expr3          transform-expr3
    :expr2          transform-expr2
-   :expr1          transform-expr1
-   :not            transform-not
    :condexpression transform-condexpression
    :regexp         transform-regexp
    :string         transform-string

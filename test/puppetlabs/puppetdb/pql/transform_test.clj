@@ -4,10 +4,8 @@
 
 ;; TODO: need to test the rest of the transforms here
 
-(deftest test-not
-  (is (= (transform [:not]) :not)))
-
 (deftest test-transform-condexpression
+  (is (= (transform-condexpression "a" "~" "foo") ["~" "a" "foo"]))
   (is (= (transform-condexpression "a" "==" 1) ["==" "a" 1])))
 (deftest test-condexpression
   (is (= (transform [:condexpression "a" "==" [:integer "1"]]) ["==" "a" 1])))
