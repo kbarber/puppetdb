@@ -1075,8 +1075,8 @@
   Things like [node active] will be expanded into a full
   subquery (via the `in` and `extract` operators)"
   [user-query]
-  (log/spy (:node (zip/post-order-transform (zip/tree-zipper user-query)
-                                            [expand-query-node validate-binary-operators]))))
+  (:node (zip/post-order-transform (zip/tree-zipper user-query)
+                                   [expand-query-node validate-binary-operators])))
 
 (declare user-node->plan-node)
 
@@ -1234,7 +1234,7 @@
   "Converts the given `user-query` to a query plan that can later be converted into
   a SQL statement"
   [query-rec paging-options user-query]
-  (let [plan-node (log/spy (user-node->plan-node query-rec (log/spy user-query)))
+  (let [plan-node (user-node->plan-node query-rec user-query)
         projections (projectable-fields query-rec)]
     (if (instance? Query plan-node)
       plan-node
