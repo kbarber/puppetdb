@@ -6,6 +6,31 @@
 ;; These tests are ordered the same as in the EBNF file, so one can
 ;; develop the expressions and tests side-by-side.
 
+(deftest test-query
+  (is (= (parse "from nodes" :start :query)
+         [[:from "nodes"]])))
+
+(deftest test-from
+  (is (= (parse "from nodes" :start :from)
+         [:from "nodes"]))
+  (is (= (parse "from nodes where a == 1" :start :from)
+         [:from "nodes"
+          [:expr4
+           [:expr3
+            [:expr2
+             [:condexpression "a" "==" [:integer "1"]]]]]])))
+
+(deftest test-entity
+  (is (= (parse "nodes" :start :entity)
+         ["nodes"])))
+
+(deftest test-where
+  (is (= (parse "where a == 1" :start :where)
+         [[:expr4
+            [:expr3
+             [:expr2
+              [:condexpression "a" "==" [:integer "1"]]]]]])))
+
 (deftest test-expressions
   (is (= (parse "a == 1" :start :expression)
          [[:expr4

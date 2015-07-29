@@ -1,6 +1,10 @@
 (ns puppetlabs.puppetdb.pql.transform
   (:require [instaparse.core :as insta]))
 
+(defn transform-from
+  ([entity] ["from" entity])
+  ([entity expression] ["from" entity expression]))
+
 (defn transform-expr4
   ;; Single arg? collapse
   ([data] data)
@@ -62,7 +66,8 @@
    (str "E-" int)))
 
 (def transform-specification
-  {:expr4          transform-expr4
+  {:from           transform-from
+   :expr4          transform-expr4
    :expr3          transform-expr3
    :expr2          transform-expr2
    :condexpression transform-condexpression

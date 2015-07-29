@@ -13,9 +13,11 @@
 (defn build-index-app
   [version]
   (fn [{:keys [params globals paging-options]}]
-    (let [query (log/spy (pql->ast (log/spy (params "query"))))]
+    (let [query  (log/spy (pql->ast (log/spy (params "query"))))
+          entity (keyword (get query 1))
+          query  (get query 2)]
       (produce-streaming-body
-       (keyword (params "entity"))
+       entity
        version
        query
        paging-options
@@ -33,6 +35,6 @@
   (-> (routes version)
       verify-accepts-json
       (validate-query-params
-       {:required ["query" "entity"]
+       {:required ["query"]
         :optional paging/query-params})
       wrap-with-paging-options))

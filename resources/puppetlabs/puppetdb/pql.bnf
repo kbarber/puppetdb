@@ -1,4 +1,20 @@
-<query> = expression;
+<query> = from;
+
+from = <'from'>, <whitespace>, entity, [<whitespace>, where];
+<entity> = 'facts' |
+           'reports' |
+           'catalogs' |
+           'resources' |
+           'nodes' |
+           'environments' |
+           'factsets' |
+           'fact-names' |
+           'fact-paths' |
+           'fact-contents' |
+           'edges' |
+           'events';
+
+<where> = <'where'>, <whitespace>, expression;
 
 (* TODO: order by *)
 (* TODO: limit, offset *)

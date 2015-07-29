@@ -2,6 +2,19 @@
   (:require [clojure.test :refer :all]
             [puppetlabs.puppetdb.pql.transform :refer :all]))
 
+(deftest test-transform-from
+  (is (= (transform-from "nodes") ["from" "nodes"]))
+  (is (= (transform-from "nodes" ["=" "a" 1]) ["from" "nodes" ["=" "a" 1]])))
+(deftest test-from
+  (is (= (transform [:from "nodes"]) ["from" "nodes"]))
+  (is (= (transform [:from "nodes"
+                     [:expr4
+                      [:expr3
+                       [:expr2
+                        [:condexpression "a" "=" [:integer "1"]]]]]])
+         ["from" "nodes"
+          ["=" "a" 1]])))
+
 (deftest test-transform-expr4
   (is (= (transform-expr4 ["=" "a" 1]) ["=" "a" 1]))
   (is (= (transform-expr4 ["=" "a" 1] ["=" "b" 2])
