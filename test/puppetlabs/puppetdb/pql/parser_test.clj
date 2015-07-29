@@ -14,7 +14,20 @@
   (is (= (parse "from nodes" :start :from)
          [:from "nodes"]))
   (is (= (parse "from nodes where a == 1" :start :from)
-         [:from "nodes"
+         [:from
+          "nodes"
+          [:expr4
+           [:expr3
+            [:expr2
+             [:condexpression "a" "==" [:integer "1"]]]]]]))
+  (is (= (parse "select a,b,c from nodes" :start :from)
+         [:from
+          [:select "a" "b" "c"]
+          "nodes"]))
+  (is (= (parse "select a,b,c from nodes where a == 1" :start :from)
+         [:from
+          [:select "a" "b" "c"]
+          "nodes"
           [:expr4
            [:expr3
             [:expr2
@@ -23,6 +36,18 @@
 (deftest test-entity
   (is (= (parse "nodes" :start :entity)
          ["nodes"])))
+
+(deftest test-select
+  (is (= (parse "select a,b,c" :start :select)
+         [:select "a" "b" "c"])))
+
+(deftest test-selectfields
+  (is (= (parse "a" :start :selectfields)
+         ["a"]))
+  (is (= (parse "a, b" :start :selectfields)
+         ["a" "b"]))
+  (is (= (parse "a,b,c" :start :selectfields)
+         ["a" "b" "c"])))
 
 (deftest test-where
   (is (= (parse "where a == 1" :start :where)

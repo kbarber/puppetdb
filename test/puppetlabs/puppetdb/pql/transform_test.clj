@@ -4,7 +4,16 @@
 
 (deftest test-transform-from
   (is (= (transform-from "nodes") ["from" "nodes"]))
-  (is (= (transform-from "nodes" ["=" "a" 1]) ["from" "nodes" ["=" "a" 1]])))
+  (is (= (transform-from "nodes" ["=" "a" 1])
+         ["from" "nodes"
+          ["=" "a" 1]]))
+  (is (= (transform-from ["extract" ["a" "b" "c"]] "nodes")
+         ["from" "nodes"
+          ["extract" ["a" "b" "c"]]]))
+  (is (= (transform-from ["extract" ["a" "b" "c"]] "nodes" ["=" "a" 1])
+         ["from" "nodes"
+          ["extract" ["a" "b" "c"]
+           ["=" "a" 1]]])))
 (deftest test-from
   (is (= (transform [:from "nodes"]) ["from" "nodes"]))
   (is (= (transform [:from "nodes"
@@ -14,6 +23,13 @@
                         [:condexpression "a" "=" [:integer "1"]]]]]])
          ["from" "nodes"
           ["=" "a" 1]])))
+
+(deftest test-tarnsform-select
+  (is (= (transform-select "a" "b" "c")
+         ["extract" ["a" "b" "c"]])))
+(deftest test-select
+  (is (= (transform [:select "a" "b" "c"])
+         ["extract" ["a" "b" "c"]])))
 
 (deftest test-transform-expr4
   (is (= (transform-expr4 ["=" "a" 1]) ["=" "a" 1]))

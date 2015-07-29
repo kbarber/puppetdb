@@ -3,7 +3,17 @@
 
 (defn transform-from
   ([entity] ["from" entity])
-  ([entity expression] ["from" entity expression]))
+  ;; TODO: right now there are 2 forms of 2-arity functions
+  ([arg1 arg2]
+   (if (string? arg1)
+     ["from" arg1 arg2]
+     ["from" arg2 arg1]))
+  ([select entity expression]
+   ["from" entity (apply vector (concat select [expression]))]))
+
+(defn transform-select
+  [& args]
+  ["extract" (apply vector args)])
 
 (defn transform-expr4
   ;; Single arg? collapse
@@ -67,6 +77,7 @@
 
 (def transform-specification
   {:from           transform-from
+   :select         transform-select
    :expr4          transform-expr4
    :expr3          transform-expr3
    :expr2          transform-expr2

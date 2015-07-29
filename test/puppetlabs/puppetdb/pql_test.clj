@@ -61,4 +61,11 @@
             ["or"
              ["not"
               ["==" "c" 3]]
-             ["==" "d" 4]]]]])))
+             ["==" "d" 4]]]]]))
+  (is (= (pql->ast "select a, b, c from nodes")
+         ["from" "nodes"
+          ["extract" ["a" "b" "c"]]]))
+  (is (= (pql->ast "select a, b, c from nodes where a = 1")
+         ["from" "nodes"
+          ["extract" ["a" "b" "c"]
+           ["=" "a" 1]]])))
