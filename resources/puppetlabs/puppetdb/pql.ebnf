@@ -16,7 +16,6 @@ from = [select, <whitespace>], <'from'>, <whitespace>, entity, [<whitespace>, wh
 
 select = <'select'>, <whitespace>, selectfields;
 <selectfields> = fieldlist;
-<fieldlist> = field, [ [<whitespace>], <','>, [<whitespace>], selectfields ];
 
 <where> = <'where'>, <whitespace>, expression;
 
@@ -38,14 +37,14 @@ expr2   = {[ not ] expr2 } | expr1;
 
 (* Conditional expression *)
 (* TODO: '~>' and 'null?' and 'in' *)
-condexpression    = field, [<whitespace>], (condexpregexp | condexpnumber | condexpmatch | condexpsubquery);
-<condexpregexp>   = condregexp, [<whitespace>], valueregexp;
-<condexpnumber>   = condnumber, [<whitespace>], valuenumber;
-<condexpmatch>    = condmatch, [<whitespace>], valuematch;
-<condexpsubquery> = condsubquery, [<whitespace>], valuesubquery;
+condexpression    = (condexpregexp | condexpnumber | condexpmatch | condexpsubquery);
+<condexpregexp>   = field, [<whitespace>], condregexp, [<whitespace>], valueregexp;
+<condexpnumber>   = field, [<whitespace>], condnumber, [<whitespace>], valuenumber;
+<condexpmatch>    = field, [<whitespace>], condmatch, [<whitespace>], valuematch;
+<condexpsubquery> = fieldlist, [<whitespace>], condsubquery, [<whitespace>], valuesubquery;
 
 (* Conditional expression parts *)
-(* TODO: we sometimes take arrays as values, we should look into this *)
+<fieldlist>     = field, [ [<whitespace>], <','>, [<whitespace>], fieldlist ];
 <field>         = #'[a-zA-Z_]+';
 (* TODO: existing query lang uses ~, puppet dsl uses =~ *)
 (* TODO: there is no concept of !~ in our language today *)
@@ -55,6 +54,7 @@ condexpression    = field, [<whitespace>], (condexpregexp | condexpnumber | cond
 (* TODO: current query engine doesn't actually support !=, you use not wrapping in an equality match instead *)
 <condmatch>     = '==' | '!=' | '=';
 <condsubquery>  = 'in';
+(* TODO: we sometimes take arrays as values, we should look into this *)
 <valueregexp>   = regexp;
 <valuenumber>   = integer | real;
 <valuematch>    = string | integer | real | boolean;

@@ -1093,14 +1093,15 @@
   [query-rec column-list expr]
   (if (or (nil? expr)
           (not (subquery-expression? expr)))
-    (assoc query-rec :where (user-node->plan-node query-rec expr)
-      :projected-fields column-list)
+    (assoc query-rec
+           :projected-fields column-list
+           :where (user-node->plan-node query-rec expr))
     (let [[subquery-name & subquery-expression] expr]
       (assoc (user-query->logical-obj subquery-name)
-        :projected-fields column-list
-        :where (when (seq subquery-expression)
-                 (user-node->plan-node (user-query->logical-obj subquery-name)
-                                       (first subquery-expression)))))))
+             :projected-fields column-list
+             :where (when (seq subquery-expression)
+                      (user-node->plan-node (user-query->logical-obj subquery-name)
+                                            (first subquery-expression)))))))
 
 (pls/defn-validated columns->fields :- [(s/either s/Keyword SqlCall SqlRaw)]
   "Convert a list of columns to their true SQL field names."

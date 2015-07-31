@@ -165,31 +165,31 @@
     (is (insta/failure? (insta/parse parse "'foo' == bar" :start :condexpression))))
 
   (testing "condexpregexp"
-    (is (= (parse "=~ /asdf/" :start :condexpregexp) ["=~" [:regexp "asdf"]]))
+    (is (= (parse "a =~ /asdf/" :start :condexpregexp) ["a" "=~" [:regexp "asdf"]]))
     ;; TODO: there is no concept of !~ in our language today
-    #_(is (= (parse "!~ /asdf/" :start :condexpregexp) ["!~" [:regexp "asdf"]]))
+    #_(is (= (parse "a !~ /asdf/" :start :condexpregexp) ["a" "!~" [:regexp "asdf"]]))
 
-    (is (insta/failure? (insta/parse parse "=~ 'bar'" :start :condexpregexp)))
-    (is (insta/failure? (insta/parse parse "=~ 4" :start :condexpregexp)))
-    (is (insta/failure? (insta/parse parse "=~ true" :start :condexpregexp)))
-    #_(is (insta/failure? (insta/parse parse "!~ 'bar'" :start :condexpregexp))))
+    (is (insta/failure? (insta/parse parse "a =~ 'bar'" :start :condexpregexp)))
+    (is (insta/failure? (insta/parse parse "a =~ 4" :start :condexpregexp)))
+    (is (insta/failure? (insta/parse parse "a =~ true" :start :condexpregexp)))
+    #_(is (insta/failure? (insta/parse parse "a !~ 'bar'" :start :condexpregexp))))
 
   (testing "condexpnumber"
-    (is (= (parse ">= 4" :start :condexpnumber) [">=" [:integer "4"]]))
+    (is (= (parse "a >= 4" :start :condexpnumber) ["a" ">=" [:integer "4"]]))
 
-    (is (insta/failure? (insta/parse parse ">= 'bar'" :start :condexpnumber)))
-    (is (insta/failure? (insta/parse parse ">= true" :start :condexpnumber)))
-    (is (insta/failure? (insta/parse parse "<= 'bar'" :start :condexpnumber)))
-    (is (insta/failure? (insta/parse parse "<= true" :start :condexpnumber)))
-    (is (insta/failure? (insta/parse parse "> 'bar'" :start :condexpnumber)))
-    (is (insta/failure? (insta/parse parse "< true" :start :condexpnumber))))
+    (is (insta/failure? (insta/parse parse "a >= 'bar'" :start :condexpnumber)))
+    (is (insta/failure? (insta/parse parse "a >= true" :start :condexpnumber)))
+    (is (insta/failure? (insta/parse parse "a <= 'bar'" :start :condexpnumber)))
+    (is (insta/failure? (insta/parse parse "a <= true" :start :condexpnumber)))
+    (is (insta/failure? (insta/parse parse "a > 'bar'" :start :condexpnumber)))
+    (is (insta/failure? (insta/parse parse "a < true" :start :condexpnumber))))
 
   (testing "condexpmatch"
-    (is (= (parse "== 'bar'" :start :condexpmatch) ["==" [:string "bar"]]))
+    (is (= (parse "a == 'bar'" :start :condexpmatch) ["a" "==" [:string "bar"]]))
 
-    (is (insta/failure? (insta/parse parse "== bar" :start :condexpmatch)))
-    (is (insta/failure? (insta/parse parse "== /bar/" :start :condexpmatch)))
-    (is (insta/failure? (insta/parse parse "!= bar" :start :condexpmatch)))))
+    (is (insta/failure? (insta/parse parse "a == bar" :start :condexpmatch)))
+    (is (insta/failure? (insta/parse parse "a == /bar/" :start :condexpmatch)))
+    (is (insta/failure? (insta/parse parse "a != bar" :start :condexpmatch)))))
 
 (deftest test-conditionalexpressionparts
   (testing "field"
