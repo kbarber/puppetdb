@@ -22,7 +22,28 @@
                        [:expr2
                         [:condexpression "a" "=" [:integer "1"]]]]]])
          ["from" "nodes"
-          ["=" "a" 1]])))
+          ["=" "a" 1]]))
+  (is (= (transform [:from
+                     [:select "a" "b" "c"]
+                     "nodes"
+                     [:expr4
+                      [:expr3
+                       [:expr2
+                        [:condexpression
+                         "a"
+                         "in"
+                         [:from
+                          [:select "a"]
+                          "facts"
+                          [:expr4
+                           [:expr3
+                            [:expr2 [:condexpression "b" "=" [:integer "2"]]]]]]]]]]])
+         ["from" "nodes"
+          ["extract" ["a" "b" "c"]
+           ["in" "a"
+            ["from" "facts"
+             ["extract" ["a"]
+              ["=" "b" 2]]]]]])))
 
 (deftest test-tarnsform-select
   (is (= (transform-select "a" "b" "c")

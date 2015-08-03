@@ -72,7 +72,14 @@
   (is (= (pql->ast "select a, b, c from nodes where a in (select x from resources where x = 1)")
          ["from" "nodes"
           ["extract" ["a" "b" "c"]
-           ["in" ["a"]
+           ["in" "a"
             ["from" "resources"
              ["extract" ["x"]
+              ["=" "x" 1]]]]]]))
+  (is (= (pql->ast "select a, b, c from nodes where (a, b) in (select a, b from resources where x = 1)")
+         ["from" "nodes"
+          ["extract" ["a" "b" "c"]
+           ["in" ["a" "b"]
+            ["from" "resources"
+             ["extract" ["a" "b"]
               ["=" "x" 1]]]]]])))

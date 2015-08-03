@@ -31,7 +31,39 @@
           [:expr4
            [:expr3
             [:expr2
-             [:condexpression "a" "==" [:integer "1"]]]]]])))
+             [:condexpression "a" "==" [:integer "1"]]]]]]))
+  (is (= (parse "select a,b,c from nodes where a in (select a from facts where b = 2)")
+         [[:from
+           [:select "a" "b" "c"]
+           "nodes"
+           [:expr4
+            [:expr3
+             [:expr2
+              [:condexpression "a" "in"
+               [:from
+                [:select "a"]
+                "facts"
+                [:expr4
+                 [:expr3
+                  [:expr2
+                   [:condexpression "b" "=" [:integer "2"]]]]]]]]]]]]))
+  (is (= (parse "select a,b,c from nodes where (a,b) in (select a,b from facts where c = 3)")
+         [[:from
+           [:select "a" "b" "c"]
+           "nodes"
+           [:expr4
+            [:expr3
+             [:expr2
+              [:condexpression
+               ["a" "b"]
+               "in"
+               [:from
+                [:select "a" "b"]
+                "facts"
+                [:expr4
+                 [:expr3
+                  [:expr2
+                   [:condexpression "c" "=" [:integer "3"]]]]]]]]]]]])))
 
 (deftest test-entity
   (is (= (parse "nodes" :start :entity)
@@ -189,7 +221,17 @@
 
     (is (insta/failure? (insta/parse parse "a == bar" :start :condexpmatch)))
     (is (insta/failure? (insta/parse parse "a == /bar/" :start :condexpmatch)))
-    (is (insta/failure? (insta/parse parse "a != bar" :start :condexpmatch)))))
+    (is (insta/failure? (insta/parse parse "a != bar" :start :condexpmatch))))
+
+  (testing "condexpsubquery"
+    (is (= (parse "a in (select a from nodes)" :start :condexpsubquery)
+           ["a" "in" [:from [:select "a"] "nodes"]]))
+    (is (= (parse "(a, b) in (select a, b from nodes)" :start :condexpsubquery)
+           [["a", "b"] "in" [:from [:select ["a", "b"]] "nodes"]]))
+    (is (= (parse "(a) in (select a, b from nodes)" :start :condexpsubquery)
+           ["a" "in" [:from [:select "a"] "nodes"]]))
+
+    (is (insta/failure? (insta/parse parse "a,b in (select a, b from nodes)")))))
 
 (deftest test-conditionalexpressionparts
   (testing "field"

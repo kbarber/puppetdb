@@ -41,11 +41,12 @@ condexpression    = (condexpregexp | condexpnumber | condexpmatch | condexpsubqu
 <condexpregexp>   = field, [<whitespace>], condregexp, [<whitespace>], valueregexp;
 <condexpnumber>   = field, [<whitespace>], condnumber, [<whitespace>], valuenumber;
 <condexpmatch>    = field, [<whitespace>], condmatch, [<whitespace>], valuematch;
-<condexpsubquery> = fieldlist, [<whitespace>], condsubquery, [<whitespace>], valuesubquery;
+<condexpsubquery> = (field | groupedfieldlist), [<whitespace>], condsubquery, [<whitespace>], valuesubquery;
 
 (* Conditional expression parts *)
-<fieldlist>     = field, [ [<whitespace>], <','>, [<whitespace>], fieldlist ];
-<field>         = #'[a-zA-Z_]+';
+groupedfieldlist = <'('>, fieldlist, <')'>;
+<fieldlist>        = field, [ [<whitespace>], <','>, [<whitespace>], fieldlist ];
+<field>            = #'[a-zA-Z_]+';
 (* TODO: existing query lang uses ~, puppet dsl uses =~ *)
 (* TODO: there is no concept of !~ in our language today *)
 <condregexp>    = '=~' | '~' | '=~';
