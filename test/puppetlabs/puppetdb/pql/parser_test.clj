@@ -55,7 +55,7 @@
             [:expr3
              [:expr2
               [:condexpression
-               ["a" "b"]
+               [:groupedfieldlist "a" "b"]
                "in"
                [:from
                 [:select "a" "b"]
@@ -227,15 +227,30 @@
     (is (= (parse "a in (select a from nodes)" :start :condexpsubquery)
            ["a" "in" [:from [:select "a"] "nodes"]]))
     (is (= (parse "(a, b) in (select a, b from nodes)" :start :condexpsubquery)
-           [["a", "b"] "in" [:from [:select ["a", "b"]] "nodes"]]))
+           [[:groupedfieldlist "a" "b"] "in" [:from [:select "a" "b"] "nodes"]]))
     (is (= (parse "(a) in (select a, b from nodes)" :start :condexpsubquery)
-           ["a" "in" [:from [:select "a"] "nodes"]]))
+           [[:groupedfieldlist "a"] "in" [:from [:select "a" "b"] "nodes"]]))
 
     (is (insta/failure? (insta/parse parse "a,b in (select a, b from nodes)")))))
 
 (deftest test-conditionalexpressionparts
+  (testing "groupedfieldlist"
+    (is (= (parse "(value,certname)" :start :groupedfieldlist)
+           [:groupedfieldlist "value", "certname"]))
+    (is (= (parse "( value , certname )" :start :groupedfieldlist)
+           [:groupedfieldlist "value", "certname"]))
+
+    (is (insta/failure? (insta/parse parse "value, certname"))))
+
+  (testing "fieldlist"
+    (is (= (parse "value, certname" :start :fieldlist) ["value", "certname"]))
+    (is (= (parse "foo,var" :start :fieldlist) ["foo", "var"]))
+
+    (is (insta/failure? (insta/parse parse "foo:var"))))
+
   (testing "field"
     (is (= (parse "certname" :start :field) ["certname"]))
+    (is (= (parse "value" :start :field) ["value"]))
 
     (is (insta/failure? (insta/parse parse "'asdf'" :start :field))))
 
@@ -261,6 +276,11 @@
 
     (is (insta/failure? (insta/parse parse ">" :start :condmatch))))
 
+  (testing "condsubquery"
+    (is (= (parse "in" :start :condsubquery) ["in"]))
+
+    (is (insta/failure? (insta/parse parse "ni" :start :condsubquery))))
+
   (testing "valueregexp"
     (is (= (parse "/asdf/" :start :valueregexp) [[:regexp "asdf"]]))
 
@@ -284,7 +304,13 @@
     (is (= (parse "1" :start :valuematch) [[:integer "1"]]))
     (is (= (parse "1.1" :start :valuematch) [[:real "1" "." "1"]]))
 
-    (is (insta/failure? (insta/parse parse "asdf" :start :valuematch)))))
+    (is (insta/failure? (insta/parse parse "asdf" :start :valuematch))))
+
+  (testing "valuesubquery"
+    (is (= (parse "(select a from nodes)" :start :valuesubquery)
+           [[:from [:select "a"] "nodes"]]))
+
+    (is (insta/failure? (insta/parse parse "select a from nodes" :start :valuesubquery)))))
 
 (deftest test-booleanoperators
   (testing "and"

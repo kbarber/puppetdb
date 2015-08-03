@@ -42,6 +42,10 @@
   [a b c]
   [b a c])
 
+(defn transform-groupedfieldlist
+  [& args]
+  args)
+
 (defn transform-regexp
   ;; TODO: need to strip escaped backslashes
   [s]
@@ -76,18 +80,19 @@
    (str "E-" int)))
 
 (def transform-specification
-  {:from           transform-from
-   :select         transform-select
-   :expr4          transform-expr4
-   :expr3          transform-expr3
-   :expr2          transform-expr2
-   :condexpression transform-condexpression
-   :regexp         transform-regexp
-   :string         transform-string
-   :boolean        transform-boolean
-   :integer        transform-integer
-   :real           transform-real
-   :exp            transform-exp})
+  {:from             transform-from
+   :select           transform-select
+   :expr4            transform-expr4
+   :expr3            transform-expr3
+   :expr2            transform-expr2
+   :condexpression   transform-condexpression
+   :groupedfieldlist transform-groupedfieldlist
+   :regexp           transform-regexp
+   :string           transform-string
+   :boolean          transform-boolean
+   :integer          transform-integer
+   :real             transform-real
+   :exp              transform-exp})
 
 (defn transform
   [tree]

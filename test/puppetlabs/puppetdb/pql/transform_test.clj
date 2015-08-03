@@ -128,6 +128,13 @@
   (is (= (transform [:condexpression "a" "==" [:integer "1"]]) ["==" "a" 1]))
   (is (= (transform [:condexpression "a" "~" [:regexp "foo"]]) ["~" "a" "foo"])))
 
+(deftest test-transform-groupedfieldlist
+  (is (= (transform-groupedfieldlist "a" "b") ["a" "b"]))
+  (is (= (transform-groupedfieldlist "a") ["a"])))
+(deftest test-groupedfieldlist
+  (is (= (transform [:groupedfieldlist "a" "b"]) ["a" "b"]))
+  (is (= (transform [:groupedfieldlist "a"]) ["a"])))
+
 (deftest test-transform-regexp
   (is (= (transform-regexp "foo") "foo")))
 (deftest test-regexp
