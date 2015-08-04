@@ -63,7 +63,23 @@
                 [:expr4
                  [:expr3
                   [:expr2
-                   [:condexpression "c" "=" [:integer "3"]]]]]]]]]]]])))
+                   [:condexpression "c" "=" [:integer "3"]]]]]]]]]]]]))
+  (is (= (parse "select value from facts where (certname,name) in (select certname,name from fact_contents where value < 100)")
+         [[:from
+            [:select "value"]
+            "facts"
+            [:expr4
+             [:expr3
+              [:expr2
+               [:condexpression
+                [:groupedfieldlist "certname" "name"]
+                "in"
+                [:from
+                 [:select "certname" "name"]
+                 "fact_contents"
+                 [:expr4
+                  [:expr3
+                   [:expr2 [:condexpression "value" "<" [:integer "100"]]]]]]]]]]]])))
 
 (deftest test-entity
   (is (= (parse "nodes" :start :entity)

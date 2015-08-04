@@ -44,7 +44,7 @@
 
 (defn transform-groupedfieldlist
   [& args]
-  args)
+  (apply vector args))
 
 (defn transform-regexp
   ;; TODO: need to strip escaped backslashes

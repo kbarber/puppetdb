@@ -909,11 +909,19 @@
    "select_resources" resources-query})
 
 (def entity-name->query-rec-name
-  {"facts" facts-query
+  {"catalogs" catalog-query
+   "edges" edges-query
+   "environments" environments-query
+   "events" report-events-query
+   "facts" facts-query
    "fact_contents" fact-contents-query
+   "fact-contents" fact-contents-query
+   "fact_paths" fact-paths-query
+   "fact-paths" fact-paths-query
+   "factsets" factsets-query
    "nodes" nodes-query
    "latest_report" latest-report-query
-   "params" resource-params-query
+   "resource_params" resource-params-query
    "resources" resources-query
    "reports" reports-query})
 
@@ -1116,12 +1124,22 @@
                       (user-node->plan-node (user-query->logical-obj subquery-name)
                                             (first subquery-expression)))))))
 
+(defn extract-expression?
+  [expr]
+  (let [f (first expr)]
+    (and (str f) (= f "extract"))))
+
 (defn create-from-node
   [entity expr]
   (let [query-rec (user-query->logical-obj* entity)]
-    (assoc (user-query->logical-obj* entity)
-           :where (user-node->plan-node (user-query->logical-obj* entity)
-                                        expr))))
+    (if (extract-expression? expr)
+      (let [[extract columns remaining-expr] expr
+            column-list (utils/vector-maybe columns)]
+        (log/spy (assoc query-rec
+                        :projected-fields column-list
+                        :where (user-node->plan-node query-rec (log/spy remaining-expr)))))
+      (assoc query-rec
+             :where (user-node->plan-node query-rec expr)))))
 
 (pls/defn-validated columns->fields :- [(s/either s/Keyword SqlCall SqlRaw)]
   "Convert a list of columns to their true SQL field names."

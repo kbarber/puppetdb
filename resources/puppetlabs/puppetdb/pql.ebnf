@@ -10,6 +10,7 @@ from = [select, <whitespace>], <'from'>, <whitespace>, entity, [<whitespace>, wh
            'factsets' |
            'fact-names' |
            'fact-paths' |
+           'fact_contents' |
            'fact-contents' |
            'edges' |
            'events';

@@ -82,4 +82,10 @@
            ["in" ["a" "b"]
             ["from" "resources"
              ["extract" ["a" "b"]
-              ["=" "x" 1]]]]]])))
+              ["=" "x" 1]]]]]]))
+  (is (= (pql->ast "select value from facts where (certname,name) in (select certname,name from fact_contents where value < 100)")
+         ["from" "facts"
+          ["extract" ["value"]
+           ["in" ["certname" "name"]
+            ["from" "fact_contents"
+             ["extract" ["certname" "name"] ["<" "value" 100]]]]]])))
