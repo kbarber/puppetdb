@@ -1164,9 +1164,7 @@
 (defn user-node->plan-node
   "Create a query plan for `node` in the context of the given query (as `query-rec`)"
   [query-rec node]
-  ;; TODO: instaparse emits a PersistentList instead of a
-  ;; PersistentVector sometimes, and this match just skips over that.
-  (cm/match [(apply vector node)]
+  (cm/match [node]
             [["=" column value]]
             (let [{:keys [type field]} (get-in query-rec [:projections column])]
               (case type
