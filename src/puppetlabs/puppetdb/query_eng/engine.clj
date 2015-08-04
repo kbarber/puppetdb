@@ -908,11 +908,24 @@
    "select_params" resource-params-query
    "select_resources" resources-query})
 
+(def entity-name->query-rec-name
+  {"facts" facts-query
+   "fact_contents" fact-contents-query
+   "nodes" nodes-query
+   "latest_report" latest-report-query
+   "params" resource-params-query
+   "resources" resources-query
+   "reports" reports-query})
+
 (defn user-query->logical-obj
   "Keypairs of the stringified subquery keyword (found in user defined queries) to the
    appropriate plan node"
   [subquery]
   (augment-for-subquery (assoc ((get user-name->query-rec-name subquery)) :subquery? true)))
+
+(defn user-query->logical-obj*
+  [subquery]
+  (augment-for-subquery (assoc ((get entity-name->query-rec-name subquery)) :subquery? true)))
 
 (def binary-operators
   #{"=" ">" "<" ">=" "<=" "~"})
@@ -1103,6 +1116,13 @@
                       (user-node->plan-node (user-query->logical-obj subquery-name)
                                             (first subquery-expression)))))))
 
+(defn create-from-node
+  [entity expr]
+  (let [query-rec (user-query->logical-obj* entity)]
+    (assoc (user-query->logical-obj* entity)
+           :where (user-node->plan-node (user-query->logical-obj* entity)
+                                        expr))))
+
 (pls/defn-validated columns->fields :- [(s/either s/Keyword SqlCall SqlRaw)]
   "Convert a list of columns to their true SQL field names."
   [query-rec
@@ -1213,6 +1233,9 @@
             [["in" column subquery-expression]]
             (map->InExpression {:column (columns->fields query-rec (utils/vector-maybe column))
                                 :subquery (user-node->plan-node query-rec subquery-expression)})
+
+            [["from" entity expr]]
+            (create-from-node entity expr)
 
             [["extract" [["function" & fargs]] expr]]
             (-> query-rec
