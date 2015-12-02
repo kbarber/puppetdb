@@ -1,5 +1,6 @@
 (ns puppetlabs.puppetdb.http.index
   (:require [net.cgrand.moustache :refer [app]]
+            [puppetlabs.puppetdb.pql :as pql]
             [puppetlabs.puppetdb.http.query :as http-q]
             [puppetlabs.puppetdb.middleware :refer [wrap-with-paging-options]]
             [puppetlabs.puppetdb.query.paging :as paging]))

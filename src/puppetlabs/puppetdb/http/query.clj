@@ -3,7 +3,8 @@
 
    Functions that aid in the parsing, serialization, and manipulation
    of PuppetDB queries embedded in HTTP parameters."
-  (:require [puppetlabs.puppetdb.cheshire :as json]
+  (:require [clojure.tools.logging :as log]
+            [puppetlabs.puppetdb.cheshire :as json]
             [clojure.walk :refer [keywordize-keys stringify-keys]]
             [clojure.core.match :as cm]
             [puppetlabs.puppetdb.query-eng :refer [produce-streaming-body]]
@@ -13,9 +14,11 @@
             [schema.core :as s]
             [puppetlabs.puppetdb.http :as http]
             [puppetlabs.puppetdb.schema :as pls]
+            [puppetlabs.puppetdb.pql :as pql]
             [puppetlabs.puppetdb.query.paging :refer [parse-limit' parse-offset' parse-order-by']]
             [puppetlabs.puppetdb.time :refer [to-timestamp]]
-            [puppetlabs.puppetdb.utils :refer [update-when]]))
+            [puppetlabs.puppetdb.utils :refer [update-when]])
+  (:import [com.fasterxml.jackson.core JsonParseException]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Schemas
@@ -232,20 +235,38 @@
       (update-when [:include_total] coerce-to-boolean)
       (update-when [:distinct_resources] coerce-to-boolean)))
 
+(defn json-or-string
+  [query]
+  (try
+    (json/parse-strict-string query true)
+    (catch JsonParseException ex
+      (let [pql-result (log/spy (pql/pql->ast2 query))]
+        (if (map? pql-result)
+          ;; TODO: throw a better error message, instead of a JSON dump of the instaparse format
+          (throw (IllegalArgumentException. (format "Error in parsing PQL query: %s" (json/generate-string pql-result))))
+          (first pql-result))))))
+
 (defn get-req->query
   "Converts parameters of a GET request to a pdb query map"
   [{:keys [params] :as req}]
   (-> params
-      (update-when ["query"] json/parse-strict-string true)
+      (update-when ["query"] json-or-string)
       (update-when ["order_by"] json/parse-strict-string true)
       (update-when ["counts_filter"] json/parse-strict-string true)
       keywordize-keys))
 
+(defn ast-or-pql
+  [query]
+  (if (vector? query)
+    query
+    (json-or-string query)))
+
 (defn post-req->query
   "Takes a POST body and parses the JSON to create a pdb query map"
   [req]
-  (with-open [reader (-> req :body clojure.java.io/reader)]
-    (json/parse-stream reader true)))
+  (-> (log/spy (with-open [reader (-> req :body clojure.java.io/reader)]
+                 (json/parse-stream reader true)))
+      (update-in [:query] ast-or-pql)))
 
 (pls/defn-validated create-query-map :- puppetdb-query-schema
   "Takes a ring request map and extracts the puppetdb query from the

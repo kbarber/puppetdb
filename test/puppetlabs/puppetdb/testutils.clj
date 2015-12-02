@@ -151,7 +151,7 @@
      (let [request (mock/request :get path
                                  (if query
                                    (assoc params
-                                     "query" (if (string? query) query (json/generate-string query)))
+                                          "query" (if (string? query) query (json/generate-string query)))
                                    params))
            orig-headers (:headers request)]
        (assoc request :headers (merge orig-headers headers)))))

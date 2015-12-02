@@ -1,0 +1,107 @@
+<query> = from;
+
+from = entity, [<whitespace>], where, [[<whitespace>], select];
+
+select = <lbracket>, selectfields, <rbracket>;
+<selectfields> = fieldlist;
+
+<where> = <lbrace>, [<whitespace>], [expression], [<whitespace>], <rbrace>;
+
+<entity> = 'facts' |
+           'reports' |
+           'catalogs' |
+           'resources' |
+           'nodes' |
+           'environments' |
+           'factsets' |
+           'fact_paths' |
+           'fact_contents' |
+           'edges' |
+           'events';
+
+(* TODO: order by *)
+(* TODO: limit, offset *)
+(* TODO: include_total *)
+(* TODO: group_by *)
+(* TODO: extract - projection *)
+(* TODO: subqueries *)
+(* TODO: aggregate functions *)
+
+(* Expressions - the number after expr is the order of precedence *)
+<expression> = expr4;
+expr4   = expr3 { [<whitespace>], or, [<whitespace>], expr4 };
+expr3   = expr2 { [<whitespace>], and, [<whitespace>], expr3 };
+expr2   = {[ not ] expr2 } | expr1;
+<expr1> = { <lparens>, expression, <rparens> } | condexpression;
+
+(* Conditional expression *)
+(* TODO: '~>' and 'null?' and 'in' *)
+condexpression    = (condexpregexp | condexpnumber | condexpmatch | condexpsubquery);
+<condexpregexp>   = field, [<whitespace>], condregexp, [<whitespace>], valueregexp;
+<condexpnumber>   = field, [<whitespace>], condnumber, [<whitespace>], valuenumber;
+<condexpmatch>    = field, [<whitespace>], condmatch, [<whitespace>], valuematch;
+<condexpsubquery> = (field | groupedfieldlist), [<whitespace>], condsubquery, [<whitespace>], valuesubquery;
+
+(* Conditional expression parts *)
+groupedfieldlist = <'('>, [<whitespace>], fieldlist, [<whitespace>], <')'>;
+<fieldlist>      = field, [ [<whitespace>], <','>, [<whitespace>], fieldlist ];
+<field>          = #'[a-zA-Z_]+';
+(* TODO: existing query lang uses ~, puppet dsl uses =~ *)
+(* TODO: there is no concept of !~ in our language today *)
+<condregexp>    = '=~' | '~' | '=~';
+<condnumber>    = '>=' | '<=' | '<' | '>';
+(* TODO: puppet dsl uses ==, existing query lang uses = *)
+(* TODO: current query engine doesn't actually support !=, you use not wrapping in an equality match instead *)
+<condmatch>     = '==' | '!=' | '=';
+<condsubquery>  = 'in';
+(* TODO: we sometimes take arrays as values, we should look into this *)
+<valueregexp>   = regexp;
+<valuenumber>   = integer | real;
+<valuematch>    = string | integer | real | boolean;
+(* TODO: does this now become superfluous? *)
+<valuesubquery> = query;
+
+(* Boolean operators *)
+<and> = [<whitespace>], <'and'>, [<whitespace>];
+<or>  = [<whitespace>], <'or'>, [<whitespace>];
+not = [<whitespace>], <'!'>, [<whitespace>]; (* TODO: determine if we want 'not' here also *)
+
+(* Regexp strings *)
+regexp = <regexpquote>, stringwithoutregexpquote, <regexpquote>
+<stringwithoutregexpquote> = #'(?:[^/\\]|\\.)*';
+<regexpquote> = "/"
+
+(* Value strings *)
+string = (<singlequote>, stringwithoutsinglequotes, <singlequote>) | (<doublequote>, stringwithoutdoublequotes, <doublequote>);
+<stringwithoutdoublequotes> = #'(?:[^"\\]|\\.)*';
+<stringwithoutsinglequotes> = #'(?:[^\'\\]|\\.)*';
+<singlequote> = "'";
+<doublequote> = "\"";
+
+(* Grouping with parens *)
+<lparens> = [<whitespace>], '(', [<whitespace>];
+<rparens> = [<whitespace>], ')', [<whitespace>];
+
+(* TODO: not sure if we should group these here, they are used for the context filter *)
+(* Braces *)
+<lbrace> = [<whitespace>], '{', [<whitespace>];
+<rbrace> = [<whitespace>], '}', [<whitespace>];
+
+(* Bracket *)
+<lbracket> = [<whitespace>], '[', [<whitespace>];
+<rbracket> = [<whitespace>], ']', [<whitespace>];
+
+(* Booleans *)
+boolean = true | false;
+true = <"true">;
+false = <"false">;
+
+(* Numbers *)
+integer    = [negative], digits;
+real       = [negative], digits, ".", digits, [exp];
+exp        = <"E" | "e">, [negative], digits;
+<digits>   = #"[0-9]+";
+<negative> = "-";
+
+(* Whitespace *)
+<whitespace> = #'\s+';
