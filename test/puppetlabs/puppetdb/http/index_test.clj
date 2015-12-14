@@ -53,7 +53,7 @@
         (is (= status http/status-bad-request)))
       ;; TODO: need to regexp against the actual parsing error, not just the general PQL parse failure
       (let [{:keys [status body]} (query-response method endpoint "foobar {}")]
-        (is (re-find #"Error in parsing PQL query" body))
+        (is (re-find #"PQL parse error at line 1, column 1" body))
         (is (= status http/status-bad-request))))
 
     (testing "pagination"

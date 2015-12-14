@@ -243,7 +243,7 @@
       (let [pql-result (log/spy (pql/pql->ast2 query))]
         (if (map? pql-result)
           ;; TODO: throw a better error message, instead of a JSON dump of the instaparse format
-          (throw (IllegalArgumentException. (format "Error in parsing PQL query: %s" (json/generate-string pql-result))))
+          (throw (IllegalArgumentException. (pql/pprint-failure pql-result)))
           (first pql-result))))))
 
 (defn get-req->query
