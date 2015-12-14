@@ -32,23 +32,22 @@ expr3   = expr2 { [<whitespace>], and, [<whitespace>], expr3 };
 expr2   = {[ not ] expr2 } | expr1;
 <expr1> = { <lparens>, expression, <rparens> } | condexpression | subquery;
 
-(* TODO: subqueries aren't treated as condexpression, because they are usually in the form op, arg1, arg2, implicit subqueries though are different *)
-(* TODO: very close to what a 'from' looks like *)
-(* TODO: should this be subquery, implicitsubquery or what?? *)
 subquery = entity, [<whitespace>], where, [[<whitespace>], select];
 
 (* Conditional expression *)
-(* TODO: '~>' and 'null?' *)
-condexpression    = (condexpregexp | condexpnumber | condexpmatch | condexpsubquery);
+(* TODO: '~>' *)
+condexpression    = (condexpregexp | condexpnumber | condexpmatch | condexpsubquery | condexpnull);
 <condexpregexp>   = field, [<whitespace>], condregexp, [<whitespace>], valueregexp;
 <condexpnumber>   = field, [<whitespace>], condnumber, [<whitespace>], valuenumber;
 <condexpmatch>    = field, [<whitespace>], condmatch, [<whitespace>], valuematch;
 <condexpsubquery> = (field | groupedfieldlist), [<whitespace>], condsubquery, [<whitespace>], valuesubquery;
+<condexpnull>     = field, [<whitespace>], condnull, [<whitespace>], boolean;
 
 (* Conditional expression parts *)
 groupedfieldlist = <'('>, [<whitespace>], fieldlist, [<whitespace>], <')'>;
 <fieldlist>      = field, [ [<whitespace>], <','>, [<whitespace>], fieldlist ];
 <field>          = #'[a-zA-Z_]+';
+
 (* TODO: existing query lang uses ~, puppet dsl uses =~ *)
 (* TODO: there is no concept of !~ in our language today *)
 <condregexp>    = '=~' | '~' | '=~';
@@ -57,6 +56,8 @@ groupedfieldlist = <'('>, [<whitespace>], fieldlist, [<whitespace>], <')'>;
 (* TODO: current query engine doesn't actually support !=, you use not wrapping in an equality match instead *)
 <condmatch>     = '==' | '!=' | '=';
 <condsubquery>  = 'in';
+<condnull>      = 'null?';
+
 (* TODO: we sometimes take arrays as values, we should look into this *)
 <valueregexp>   = regexp;
 <valuenumber>   = integer | real;

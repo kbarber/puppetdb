@@ -189,6 +189,13 @@
 
   (is (insta/failure? (insta/parse parse "foo and 'bar'" :start :expression))))
 
+(deftest test-subquery
+  (testing "subquery"
+    (is (= (parse "nodes{}" :start :subquery)
+           [:subquery "nodes"]))
+    (is (= (parse "nodes { a = 'foo' }" :start :subquery)
+           [:subquery "nodes" [:expr4 [:expr3 [:expr2 [:condexpression "a" "=" [:string "foo"]]]]]]))))
+
 (deftest test-condexpression
   (testing "condexpression"
     (is (= (parse "certname = 'foobar'" :start :condexpression)
@@ -249,11 +256,14 @@
 
     (is (insta/failure? (insta/parse parse "a,b in nodes{}[a,b]"))))
 
-  (testing "condexpimpsubquery"
-    (is (= (parse "nodes{}" :start :subquery)
-           [:subquery "nodes"]))
-    (is (= (parse "nodes { a = 'foo' }" :start :subquery)
-           [:subquery "nodes" [:expr4 [:expr3 [:expr2 [:condexpression "a" "=" [:string "foo"]]]]]]))))
+  (testing "condexpnull"
+    (is (= (parse "foo null? true" :start :condexpnull)
+           ["foo" "null?" [:boolean [:true]]]))
+    (is (= (parse "foo null? false" :start :condexpnull)
+           ["foo" "null?" [:boolean [:false]]]))
+
+    (is (insta/failure? (insta/parse parse "foo null? 7")))
+    (is (insta/failure? (insta/parse parse "foo null?")))))
 
 (deftest test-conditionalexpressionparts
   (testing "groupedfieldlist"
@@ -302,6 +312,11 @@
     (is (= (parse "in" :start :condsubquery) ["in"]))
 
     (is (insta/failure? (insta/parse parse "ni" :start :condsubquery))))
+
+  (testing "condnull"
+    (is (= (parse "null?" :start :condnull) ["null?"]))
+
+    (is (insta/failure? (insta/parse parse "null" :start :condnull))))
 
   (testing "valueregexp"
     (is (= (parse "/asdf/" :start :valueregexp) [[:regexp "asdf"]]))

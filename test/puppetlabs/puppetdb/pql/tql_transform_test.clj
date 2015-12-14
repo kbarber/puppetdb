@@ -176,10 +176,12 @@
 
 (deftest test-transform-condexpression
   (is (= (transform-condexpression "a" "~" "foo") ["~" "a" "foo"]))
-  (is (= (transform-condexpression "a" "==" 1) ["==" "a" 1])))
+  (is (= (transform-condexpression "a" "==" 1) ["==" "a" 1]))
+  (is (= (transform-condexpression "foo" "null?" true) ["null?" "foo" true])))
 (deftest test-condexpression
   (is (= (transform [:condexpression "a" "==" [:integer "1"]]) ["==" "a" 1]))
-  (is (= (transform [:condexpression "a" "~" [:regexp "foo"]]) ["~" "a" "foo"])))
+  (is (= (transform [:condexpression "a" "~" [:regexp "foo"]]) ["~" "a" "foo"]))
+  (is (= (transform [:condexpression "foo" "null?" [:boolean [:true]]]) ["null?" "foo" true])))
 
 (deftest test-transform-groupedfieldlist
   (is (= (transform-groupedfieldlist "a" "b") ["a" "b"]))

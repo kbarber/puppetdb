@@ -20,6 +20,9 @@
   (is (= (pql "nodes { !a == 1 }")
          ["from" "nodes"
           ["not" ["==" "a" 1]]]))
+  (is (= (pql "events { line null? true }")
+         ["from" "events"
+          ["null?" "line" true]]))
   (is (= (pql "nodes { !(a == 1) }")
          ["from" "nodes"
           ["not" ["==" "a" 1]]]))
