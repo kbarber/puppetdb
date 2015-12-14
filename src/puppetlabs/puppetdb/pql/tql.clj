@@ -10,6 +10,16 @@
   ([entity expression select]
    ["from" entity (apply vector (concat select [expression]))]))
 
+;; TODO: this looks a lot like a 'from' but is extraction just 'dumb' for implicit subqueries?
+(defn transform-subquery
+  ([entity]
+   ["subquery" entity])
+  ([entity arg2]
+   ["subquery" entity arg2])
+  ;; TODO: this one, seems dumb, an implicit subquery would throw away these results
+  ([entity expression select]
+   ["subquery" entity (apply vector (concat select [expression]))]))
+
 (defn transform-select
   [& args]
   ["extract" (apply vector args)])
@@ -80,6 +90,7 @@
 
 (def transform-specification
   {:from             transform-from
+   :subquery         transform-subquery
    :select           transform-select
    :expr4            transform-expr4
    :expr3            transform-expr3

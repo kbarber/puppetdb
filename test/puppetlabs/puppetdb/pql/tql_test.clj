@@ -74,6 +74,9 @@
          ["from" "nodes"
           ["extract" ["a" "b" "c"]
            ["=" "a" 1]]]))
+
+  ;; Subqueries
+
   (is (= (pql "nodes { a in resources { x = 1 } [x] } [a, b, c]")
          ["from" "nodes"
           ["extract" ["a" "b" "c"]
@@ -81,6 +84,12 @@
             ["from" "resources"
              ["extract" ["x"]
               ["=" "x" 1]]]]]]))
+  (is (= (pql "nodes { resources { x = 1 } } [a, b, c]")
+         ["from" "nodes"
+          ["extract" ["a" "b" "c"]
+           ["subquery" "resources"
+            ["=" "x" 1]]]]))
+
   (is (= (pql "nodes { (a, b) in resources { x = 1 } [a, b] } [a, b, c]")
          ["from" "nodes"
           ["extract" ["a" "b" "c"]
@@ -88,9 +97,20 @@
             ["from" "resources"
              ["extract" ["a" "b"]
               ["=" "x" 1]]]]]]))
+  (is (= (pql "nodes { resources { x = 1 } } [a,b,c]")
+         ["from" "nodes"
+          ["extract" ["a" "b" "c"]
+           ["subquery" "resources"
+            ["=" "x" 1]]]]))
+
   (is (= (pql "facts { (certname,name) in fact_contents { value < 100 }[certname,name]}[value]")
          ["from" "facts"
           ["extract" ["value"]
            ["in" ["certname" "name"]
             ["from" "fact_contents"
-             ["extract" ["certname" "name"] ["<" "value" 100]]]]]])))
+             ["extract" ["certname" "name"] ["<" "value" 100]]]]]]))
+  (is (= (pql "facts { fact_contents { value < 100 } }[value]")
+         ["from" "facts"
+          ["extract" ["value"]
+           ["subquery" "fact_contents"
+            ["<" "value" 100]]]])))

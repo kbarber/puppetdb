@@ -49,6 +49,55 @@
              ["extract" ["a"]
               ["=" "b" 2]]]]]])))
 
+
+;; TODO: seriously, this is just cut & paste from the 'from' part
+(deftest test-transform-subquery
+  (is (= (transform-subquery "nodes") ["subquery" "nodes"]))
+  (is (= (transform-subquery "nodes" ["=" "a" 1])
+         ["subquery" "nodes"
+          ["=" "a" 1]]))
+  (is (= (transform-subquery "nodes" ["extract" ["a" "b" "c"]])
+         ["subquery" "nodes"
+          ["extract" ["a" "b" "c"]]]))
+  (is (= (transform-subquery "nodes" ["=" "a" 1] ["extract" ["a" "b" "c"]])
+         ["subquery" "nodes"
+          ["extract" ["a" "b" "c"]
+           ["=" "a" 1]]])))
+(deftest test-subquery
+  (is (= (transform [:subquery "nodes"]) ["subquery" "nodes"]))
+  (is (= (transform [:subquery "nodes"
+                     [:expr4
+                      [:expr3
+                       [:expr2
+                        [:condexpression "a" "=" [:integer "1"]]]]]])
+         ["subquery" "nodes"
+          ["=" "a" 1]]))
+  (is (= (transform [:subquery "nodes"
+                     [:select "a" "b" "c"]])
+         ["subquery" "nodes"
+          ["extract" ["a" "b" "c"]]]))
+  (is (= (transform [:subquery
+                     "nodes"
+                     [:expr4
+                      [:expr3
+                       [:expr2
+                        [:condexpression
+                         "a"
+                         "in"
+                         [:from
+                          "facts"
+                          [:expr4
+                           [:expr3
+                            [:expr2 [:condexpression "b" "=" [:integer "2"]]]]]
+                          [:select "a"]]]]]]
+                     [:select "a" "b" "c"]])
+         ["subquery" "nodes"
+          ["extract" ["a" "b" "c"]
+           ["in" "a"
+            ["from" "facts"
+             ["extract" ["a"]
+              ["=" "b" 2]]]]]])))
+
 (deftest test-tarnsform-select
   (is (= (transform-select "a" "b" "c")
          ["extract" ["a" "b" "c"]])))

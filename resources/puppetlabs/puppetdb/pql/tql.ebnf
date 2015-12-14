@@ -23,8 +23,6 @@ select = <lbracket>, selectfields, <rbracket>;
 (* TODO: limit, offset *)
 (* TODO: include_total *)
 (* TODO: group_by *)
-(* TODO: extract - projection *)
-(* TODO: subqueries *)
 (* TODO: aggregate functions *)
 
 (* Expressions - the number after expr is the order of precedence *)
@@ -32,10 +30,15 @@ select = <lbracket>, selectfields, <rbracket>;
 expr4   = expr3 { [<whitespace>], or, [<whitespace>], expr4 };
 expr3   = expr2 { [<whitespace>], and, [<whitespace>], expr3 };
 expr2   = {[ not ] expr2 } | expr1;
-<expr1> = { <lparens>, expression, <rparens> } | condexpression;
+<expr1> = { <lparens>, expression, <rparens> } | condexpression | subquery;
+
+(* TODO: subqueries aren't treated as condexpression, because they are usually in the form op, arg1, arg2, implicit subqueries though are different *)
+(* TODO: very close to what a 'from' looks like *)
+(* TODO: should this be subquery, implicitsubquery or what?? *)
+subquery = entity, [<whitespace>], where, [[<whitespace>], select];
 
 (* Conditional expression *)
-(* TODO: '~>' and 'null?' and 'in' *)
+(* TODO: '~>' and 'null?' *)
 condexpression    = (condexpregexp | condexpnumber | condexpmatch | condexpsubquery);
 <condexpregexp>   = field, [<whitespace>], condregexp, [<whitespace>], valueregexp;
 <condexpnumber>   = field, [<whitespace>], condnumber, [<whitespace>], valuenumber;

@@ -247,7 +247,13 @@
     (is (= (parse "(a) in nodes{}[a,b]" :start :condexpsubquery)
            [[:groupedfieldlist "a"] "in" [:from "nodes" [:select "a" "b"]]]))
 
-    (is (insta/failure? (insta/parse parse "a,b in nodes{}[a,b]")))))
+    (is (insta/failure? (insta/parse parse "a,b in nodes{}[a,b]"))))
+
+  (testing "condexpimpsubquery"
+    (is (= (parse "nodes{}" :start :subquery)
+           [:subquery "nodes"]))
+    (is (= (parse "nodes { a = 'foo' }" :start :subquery)
+           [:subquery "nodes" [:expr4 [:expr3 [:expr2 [:condexpression "a" "=" [:string "foo"]]]]]]))))
 
 (deftest test-conditionalexpressionparts
   (testing "groupedfieldlist"
