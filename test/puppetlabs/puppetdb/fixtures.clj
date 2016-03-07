@@ -22,8 +22,14 @@
 (def ^:dynamic *app* nil)
 (def ^:dynamic *command-app* nil)
 
+(defn blocking-migrate!
+  "Run a migrate!, but wait for the vacuum future to finish"
+  [db]
+  (let [f (migrate! db)]
+    (when (future? f) @f)))
+
 (defn init-db [db read-only?]
-  (jdbc/with-db-connection db (migrate! db))
+  (jdbc/with-db-connection db (blocking-migrate! db))
   (jdbc/pooled-datasource (assoc db :read-only? read-only?)))
 
 (defn with-db-metadata
@@ -40,7 +46,7 @@
   (binding [*db* (clean-db-map)]
     (jdbc/with-db-connection *db*
       (with-redefs [sutils/db-metadata (delay (sutils/db-metadata-fn))]
-        (migrate! *db*)
+        (blocking-migrate! *db*)
         (f)))))
 
 (defn without-db-var
